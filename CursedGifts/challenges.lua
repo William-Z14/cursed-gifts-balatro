@@ -116,12 +116,14 @@ function CG.intro_ui()
     } },
     line('This mod contains horror: sudden sounds, screen flashes', '本 mod 含恐怖内容：突然的声音、画面闪烁和扭曲，'),
     line('and distortion, and text about death and folk taboos.', '以及关于死亡和民俗禁忌的文字。'),
-    line('You can change this any time in Mods > Cursed Gifts > Config.', '随时可以在 Mods → 诅咒礼物 → 设置 里改。', HEX('b8a99a'), 0.32), -- 原来的灰色在深底上看不清
+    line('You can change this any time in Mods > Cursed Gifts > Config.', '随时可以在 模组 → Cursed Gifts → 配置 里改。', HEX('b8a99a'), 0.32), -- 原来的灰色在深底上看不清
     { n = G.UIT.R, config = { align = 'cm', padding = 0.15 }, nodes = {
-      UIBox_button { button = 'cg_pick_full', colour = HEX('7a1414'), minw = 4.2, minh = 0.9, scale = 0.42,
-        label = { CG.L('Ghost Month', '鬼月'), CG.L('full horror', '完整恐怖') } },
-      UIBox_button { button = 'cg_pick_gentle', colour = G.C.GREY, minw = 4.2, minh = 0.9, scale = 0.42,
-        label = { CG.L('Gentle', '温和'), CG.L('no flashes / jump scares', '不闪烁、不惊吓') } },
+      { n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+        UIBox_button { button = 'cg_pick_full', colour = HEX('7a1414'), minw = 4.2, minh = 0.9, scale = 0.42,
+          label = { CG.L('Ghost Month', '鬼月'), CG.L('full horror', '完整恐怖') } } } },
+      { n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+        UIBox_button { button = 'cg_pick_gentle', colour = G.C.GREY, minw = 4.2, minh = 0.9, scale = 0.42,
+          label = { CG.L('Gentle', '温和'), CG.L('no flashes / jump scares', '不闪烁、不惊吓') } } } },
     } },
   } }
 end
@@ -146,11 +148,11 @@ end
 -- 原版要用 5 种牌组各赢一次才开放挑战页（新存档打不开）；不改原版进度，在这里直接开挑战
 
 CG.CHAL = {
-  { key = 'c_cg_replacement', en = { 'Start with Red Envelope + Mo-sin-a.', 'It comes at 9 Dread.' },
-    zh = { '开局：路边红包 + 魔神仔', '恐惧到 9 它就来' } },
-  { key = 'c_cg_zhongyuan', en = { 'Start with Offering Table + Doll, 6 Dread.', 'After each Boss, a gift at the door.' },
-    zh = { '开局：普渡供桌 + 娃娃，恐惧 6', '每过一个 Boss，门口多一份礼物' } },
-  { key = 'c_cg_zhongkui', en = { 'Zhong Kui Dance, Monkey Paw, Water Ghost.', 'No Exorcist. It comes at 9.' },
+  { key = 'c_cg_replacement', en = { 'Red Envelope + Mo-sin-a. It comes at 9.' },
+    zh = { '路边红包 + 魔神仔，恐惧到 9 它就来' } },
+  { key = 'c_cg_zhongyuan', en = { 'Offering Table + Doll, 6 Dread.', 'A gift at the door after each Boss.' },
+    zh = { '普渡供桌 + 瓷娃娃，恐惧 6', '每过一个 Boss，门口多一份礼物' } },
+  { key = 'c_cg_zhongkui', en = { "Zhong Kui + Monkey's Paw + Water Ghost.", 'No Exorcist. It comes at 9.' },
     zh = { '跳钟馗 + 猴爪 + 水鬼', '没有法师，恐惧到 9 它就来' } },
 }
 
@@ -178,15 +180,18 @@ CG.mod.extra_tabs = function()
           desc[#desc + 1] = { n = G.UIT.R, config = { align = 'cl', padding = 0.02 }, nodes = {
             { n = G.UIT.T, config = { text = s, scale = 0.32, colour = G.C.UI.TEXT_LIGHT } } } }
         end
-        rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.08 }, nodes = {
-          UIBox_button { button = 'cg_chal_' .. i, colour = HEX('7a1414'), minw = 2.8, minh = 0.7, scale = 0.4,
-            label = { localize(c.key, 'challenge_names') } },
-          { n = G.UIT.C, config = { align = 'cl', padding = 0.1, minw = 5 }, nodes = desc },
+        -- 按钮单独包一列，说明文字在右边一列（之前按钮直接放进行里，会和说明叠在一起）
+        rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cl', padding = 0.08 }, nodes = {
+          { n = G.UIT.C, config = { align = 'cm', minw = 3 }, nodes = {
+            UIBox_button { button = 'cg_chal_' .. i, colour = HEX('7a1414'), minw = 2.8, minh = 0.7, scale = 0.4,
+              label = { localize(c.key, 'challenge_names') } } } },
+          { n = G.UIT.C, config = { align = 'cl', padding = 0.05, minw = 5.2 }, nodes = desc },
         } }
       end
       rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.15 }, nodes = {
-        UIBox_button { button = 'cg_replay_intro', colour = G.C.GREY, minw = 4, minh = 0.6, scale = 0.35,
-          label = { CG.L('Choose horror intensity again', '重新选择恐怖强度') } } } }
+        { n = G.UIT.C, config = { align = 'cm' }, nodes = {
+          UIBox_button { button = 'cg_replay_intro', colour = G.C.GREY, minw = 4, minh = 0.6, scale = 0.35,
+            label = { CG.L('Choose horror intensity again', '重新选择恐怖强度') } } } } } }
       return { n = G.UIT.ROOT, config = { align = 'cm', padding = 0.15, colour = G.C.BLACK, r = 0.1, minw = 8 },
         nodes = { { n = G.UIT.C, config = { align = 'cm' }, nodes = rows } } }
     end,

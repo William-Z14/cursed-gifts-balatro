@@ -28,14 +28,14 @@ Plays fine alongside other content mods: Cursed Jokers never appear in the shop,
 ## Install
 
 1. Install [Lovely](https://github.com/ethangreen-dev/lovely-injector) and [Steamodded](https://github.com/Steamodded/smods).
-2. Download `CursedGifts-v0.2.2.zip` from Releases and unzip the `CursedGifts` folder into your `Mods` folder.
+2. Download `CursedGifts-v0.2.3.zip` from Releases and unzip the `CursedGifts` folder into your `Mods` folder.
 3. Start Balatro. Modded runs don't count toward Steam achievements (true of all Steamodded mods).
 
 Tested with Balatro 1.0.1o, Steamodded 26.1002.0, Lovely 0.10.0 on macOS.
 
 ## Feedback
 
-This is an early version (0.2.2). Bug reports, balance notes and folklore corrections are very welcome — please open an Issue.
+This is an early version (0.2.3). Bug reports, balance notes and folklore corrections are very welcome — please open an Issue.
 
 ## Credits & license
 

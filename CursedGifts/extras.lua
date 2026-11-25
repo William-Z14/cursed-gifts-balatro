@@ -14,34 +14,34 @@ SMODS.Atlas { key = 'tags', path = 'tags.png', px = 34, py = 34 }
 local TIPS = {
   cg_dread = {
     ['en-us'] = { name = 'Dread', text = {
-      'At {C:red}#1#{}, {C:attention}It{} comes and you give it a Joker',
+      'When full, {C:attention}It{} comes for a Joker',
       'Each visit it comes {C:attention}closer{}',
       'The third time, it takes {C:red}you{}',
     } },
     ['zh_CN'] = { name = '恐惧', text = {
-      '到 {C:red}#1#{} 时{C:attention}它{}会来，你得交出一张小丑',
+      '满了，{C:attention}它{}就来：交出一张小丑',
       '它每来一次就{C:attention}更近{}一些',
       '第三次，它带走的是{C:red}你{}',
     } },
   },
   cg_gift_rule = {
     ['en-us'] = { name = 'Cursed', text = {
-      'Never in the shop, only {C:attention}given{}',
+      'Never sold, only {C:attention}given{}',
       "Can't be destroyed",
+      'Sell: {C:attention}passes on{}, back in {C:attention}3{} rounds',
     } },
     ['zh_CN'] = { name = '诅咒', text = {
-      '商店不卖，只会被{C:attention}送{}来',
-      '无法被销毁',
+      '商店不卖，只会被{C:attention}送{}来，毁不掉',
+      '卖掉就是{C:attention}转送{}：{C:attention}3{} 回合后回来，更强',
     } },
   },
   cg_pass_on = {
     ['en-us'] = { name = 'Passing On', text = {
-      'Sells for {C:money}$0{}: selling passes it on',
-      'It returns in {C:attention}2-3{} rounds, stronger',
+      'Sell: {C:attention}passes on{}, back in {C:attention}2{}',
+      'rounds, a little stronger',
     } },
     ['zh_CN'] = { name = '转送', text = {
-      '卖价 {C:money}$0{}，卖出就是转送',
-      '{C:attention}2-3{} 回合后回来，更强一点',
+      '卖掉就是{C:attention}转送{}：{C:attention}2{} 回合后回来，更强',
     } },
   },
 }
@@ -58,25 +58,16 @@ CG.mod.process_loc_text = function(...)
   end
 end
 
--- 给本 mod 的每张牌挂上对应的悬浮说明
-local function mentions_dread(c)
-  local en = c.loc_txt and c.loc_txt['en-us']
-  for _, l in ipairs(en and en.text or {}) do
-    if type(l) == 'string' and l:find('Dread', 1, true) and not l:find('f:cg_ghost', 1, true) then return true end
-  end
-end
+-- 给本 mod 的牌挂悬浮说明，像原版一样最多一个：诅咒牌挂「诅咒」，普通礼物挂「转送」
+-- 「恐惧」的说明挂在恐惧条上（main.lua CG.make_ui），不再每张牌都弹
 for key, c in pairs(SMODS.Centers) do
-  if type(key) == 'string' and (key:find('^j_cg_') or key:find('^c_cg_')) then
-    local cursed, gift, dread = c.cg_cursed, c.cg_gift, c.cg_cursed or mentions_dread(c)
-    if cursed or gift or dread then
-      local lv = c.loc_vars
-      c.loc_vars = function(self, info_queue, card)
-        local r = lv and lv(self, info_queue, card) or nil
-        if cursed then info_queue[#info_queue + 1] = { set = 'Other', key = 'cg_gift_rule' } end
-        if cursed or gift then info_queue[#info_queue + 1] = { set = 'Other', key = 'cg_pass_on' } end
-        if dread then info_queue[#info_queue + 1] = { set = 'Other', key = 'cg_dread', vars = { CG.threshold() } } end
-        return r
-      end
+  if type(key) == 'string' and (key:find('^j_cg_') or key:find('^c_cg_')) and (c.cg_cursed or c.cg_gift) then
+    local tip = c.cg_cursed and 'cg_gift_rule' or 'cg_pass_on'
+    local lv = c.loc_vars
+    c.loc_vars = function(self, info_queue, card)
+      local r = lv and lv(self, info_queue, card) or nil
+      info_queue[#info_queue + 1] = { set = 'Other', key = tip }
+      return r
     end
   end
 end
@@ -171,8 +162,8 @@ SMODS.Voucher {
   key = 'deliverance', atlas = 'extras', pos = { x = 4, y = 0 }, cost = 10, discovered = true, unlocked = true,
   requires = { 'v_cg_offering' },
   loc_txt = {
-    ['en-us'] = { name = 'Deliverance', text = { '{C:attention}It{} comes {C:attention}2{} Dread later' } },
-    ['zh_CN'] = { name = '超渡', text = { '{C:attention}它{}晚 {C:attention}2{} 点恐惧才来' } },
+    ['en-us'] = { name = 'Deliverance', text = { '{C:attention}It{} needs {C:attention}2{} more Dread', 'before it comes' } },
+    ['zh_CN'] = { name = '超渡', text = { '恐惧要多 {C:attention}2{} 点，', '{C:attention}它{}才会来' } },
   },
   in_pool = function() return touched() end,
 }

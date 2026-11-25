@@ -5,7 +5,7 @@ CursedGifts = CursedGifts or {}
 if os.getenv('CG_TEST') or os.getenv('CG_ENDINGS') or os.getenv('CG_MEMORY') then
   pcall(function()
     local dw, dh = love.window.getDesktopDimensions()
-    local demo = os.getenv('CG_TEST') == 'demo' -- 录演示：1280x720、不放大像素
+    local demo = os.getenv('CG_TEST') == 'demo' or os.getenv('CG_TEST') == 'polish' -- 录演示：1280x720、不放大像素
     local w, h = demo and 960 or 640, demo and 540 or 400
     love.window.setMode(w, h, { fullscreen = false, resizable = true, highdpi = not demo, x = dw - w - 10, y = dh - h - 40 })
   end)
@@ -138,12 +138,20 @@ function CG.update_ui()
   CG.ui.marks = ' ' .. ('X'):rep(c) .. ('-'):rep(CG.MAX_COMES - c)
 end
 
+-- 鼠标停在恐惧条上显示「恐惧」说明（文字和卡牌悬浮说明共用 extras.lua 的 cg_dread）
+function CG.dread_tip()
+  local d = G.localization and G.localization.descriptions and G.localization.descriptions.Other
+  d = d and d.cg_dread
+  if not d or not d.text then return nil end
+  return { title = d.name, text = d.text }
+end
+
 function CG.make_ui()
   if CG.box then CG.box:remove(); CG.box = nil end
   if not G.jokers then return end
   CG.box = UIBox {
     definition = { n = G.UIT.ROOT, config = { align = 'cm', colour = G.C.CLEAR }, nodes = {
-      { n = G.UIT.R, config = { align = 'cm', padding = 0.06, r = 0.08, colour = HEX('3a0a0e'), emboss = 0.05, minw = 1.7 }, nodes = {
+      { n = G.UIT.R, config = { align = 'cm', padding = 0.06, r = 0.08, colour = HEX('3a0a0e'), emboss = 0.05, minw = 1.7, tooltip = CG.dread_tip() }, nodes = {
         { n = G.UIT.T, config = { text = CG.L('Dread ', '恐惧 '), scale = 0.32, colour = HEX('e8d8c0') } },
         { n = G.UIT.T, config = { ref_table = CG.ui, ref_value = 'text', scale = 0.32, colour = HEX('ff6b6b') } },
         { n = G.UIT.T, config = { ref_table = CG.ui, ref_value = 'marks', scale = 0.3, colour = HEX('9a7d6a') } },
@@ -402,8 +410,8 @@ SMODS.Sticker {
   key = 'cursed', atlas = 'stickers', pos = { x = 0, y = 0 }, badge_colour = HEX('5a0f14'),
   needs_enable_flag = true, rate = 0,
   loc_txt = {
-    ['en-us'] = { name = 'Cursed', label = 'Cursed', text = { "Can't be destroyed.", 'Selling {C:attention}passes it on{};', 'it returns in {C:attention}3{} rounds' } },
-    ['zh_CN'] = { name = '诅咒', label = '诅咒', text = { '无法被销毁', '卖出 = {C:attention}转送{}，', '{C:attention}3{} 回合后回来' } },
+    ['en-us'] = { name = 'Cursed', label = 'Cursed', text = { "Can't be destroyed", 'Sell: {C:attention}passes on{},', 'back in {C:attention}3{} rounds' } },
+    ['zh_CN'] = { name = '诅咒', label = '诅咒', text = { '毁不掉', '卖掉就是{C:attention}转送{}：{C:attention}3{} 回合后回来' } },
   },
 }
 
@@ -747,14 +755,13 @@ CG.J {
   config = { extra = { dollars = 20, dread = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Red Envelope', text = {
-      'Gain {C:money}$#1#{} when obtained',
-      'Scored {C:hearts}Hearts{} and {C:diamonds}Diamonds{} give {C:money}$1{}',
+      'Gain {C:money}$#1#{}. Scored {C:hearts}Hearts{}',
+      'and {C:diamonds}Diamonds{} give {C:money}$1{}',
       '{C:red}+#2#{} Dread each round',
       '{C:cg_ink,f:cg_ghost}Pick it up, and you said yes to the wedding.{}',
     } },
     ['zh_CN'] = { name = '路边红包', text = {
-      '获得时 {C:money}+$#1#{}',
-      '计分的{C:hearts}红心{}和{C:diamonds}方块{} {C:money}+$1{}',
+      '获得 {C:money}+$#1#{}，计分的{C:hearts}红心{}/{C:diamonds}方块{} {C:money}+$1{}',
       '每回合 {C:red}+#2#{} 恐惧',
       '{C:cg_ink,f:cg_ghost}撿起來，就是答應了這門親事。{}',
     } },
@@ -789,14 +796,13 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = "Monkey's Paw", text = {
       '{X:mult,C:white} X#1# {} Mult',
-      'At end of round, destroys the',
-      '{C:attention}lowest{} ranked card in hand',
+      'End of round: destroy the',
+      '{C:attention}lowest{} card in hand',
       '{C:cg_ink,f:cg_ghost}Borrowed luck must be paid back.{}',
     } },
     ['zh_CN'] = { name = '猴爪', text = {
       '{X:mult,C:white} X#1# {} 倍率',
-      '回合结束时销毁',
-      '手牌中{C:attention}点数最小{}的一张',
+      '回合结束：销毁手牌中{C:attention}最小{}的一张',
       '{C:cg_ink,f:cg_ghost}借來的運，要還的。{}',
     } },
   },
@@ -856,14 +862,14 @@ CG.J {
   config = { extra = { per = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Exorcist', text = {
-      'Sell this to destroy all {C:red}Cursed{} Jokers',
-      'and earn {C:money}$#1#{} per Dread, then reset it',
+      'Sell: destroy all {C:red}Cursed{} Jokers,',
+      '{C:money}$#1#{} per Dread, Dread to 0',
       '{C:inactive}(Currently {C:money}$#2#{C:inactive}){}',
       '{C:cg_ink,f:cg_ghost}He takes the fee. And the bad luck.{}',
     } },
     ['zh_CN'] = { name = '法师', text = {
       '卖掉：销毁所有{C:red}诅咒{}小丑，',
-      '每点恐惧 {C:money}+$#1#{}，然后恐惧清零',
+      '每点恐惧 {C:money}+$#1#{}，恐惧清零',
       '{C:inactive}（当前 {C:money}$#2#{C:inactive}）{}',
       '{C:cg_ink,f:cg_ghost}紅包收了，煞也帶走了。{}',
     } },
@@ -901,14 +907,12 @@ CG.J {
   config = { extra = { xmult = 2, step = 0.5, dread = 1 } },
   loc_txt = {
     ['en-us'] = { name = 'Porcelain Doll', text = {
-      '{X:mult,C:white} X#1# {} Mult if played',
-      'hand contains a {C:attention}Pair{}',
+      '{X:mult,C:white} X#1# {} Mult if hand has a {C:attention}Pair{}',
       '{C:red}+#2#{} Dread each round',
       '{C:cg_ink,f:cg_ghost}Not by the bed. Not in the seventh month.{}',
     } },
     ['zh_CN'] = { name = '瓷娃娃', text = {
-      '牌型含{C:attention}对子{}时',
-      '{X:mult,C:white} X#1# {} 倍率',
+      '含{C:attention}对子{}时 {X:mult,C:white} X#1# {} 倍率',
       '每回合 {C:red}+#2#{} 恐惧',
       '{C:cg_ink,f:cg_ghost}七月，別把它擺在床頭。{}',
     } },
@@ -1011,14 +1015,13 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Paper Effigy', text = {
       'Copies the Joker to its {C:attention}left{}',
-      'Burns in {C:attention}#1#{} rounds, leaving',
-      'a {C:tarot}Tarot{} card {C:inactive}({C:red}+#2#{C:inactive} Dread){}',
+      'In {C:attention}#1#{} rounds, burns into a',
+      '{C:tarot}Tarot{} card {C:inactive}({C:red}+#2#{C:inactive} Dread){}',
       '{C:cg_ink,f:cg_ghost}Made to take your place.{}',
     } },
     ['zh_CN'] = { name = '纸人', text = {
       '复制{C:attention}左边{}的小丑',
-      '{C:attention}#1#{} 回合后烧掉，留下一张',
-      '{C:tarot}塔罗牌{}{C:inactive}（{C:red}+#2#{C:inactive} 恐惧）{}',
+      '{C:attention}#1#{} 回合后烧成{C:tarot}塔罗牌{}{C:inactive}（{C:red}+#2#{C:inactive} 恐惧）{}',
       '{C:cg_ink,f:cg_ghost}紮來替你擋煞的。{}',
     } },
   },
@@ -1048,13 +1051,11 @@ CG.J {
   config = { extra = { dollars = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Joss Paper', text = {
-      'Sell any card:',
-      '{C:money}+$#1#{} and {C:red}+1{} Dread',
+      'Sell any card: {C:money}+$#1#{}, {C:red}+1{} Dread',
       '{C:cg_ink,f:cg_ghost}Silver for the dead, gold for the gods.{}',
     } },
     ['zh_CN'] = { name = '纸钱', text = {
-      '卖掉任何一张牌：',
-      '{C:money}+$#1#{}，{C:red}+1{} 恐惧',
+      '卖掉任何牌：{C:money}+$#1#{}，{C:red}+1{} 恐惧',
       '{C:cg_ink,f:cg_ghost}銀紙燒給好兄弟，金紙燒給神。{}',
     } },
   },
@@ -1073,12 +1074,12 @@ CG.J {
   config = { extra = { mult = 7 } },
   loc_txt = {
     ['en-us'] = { name = 'Night Watch', text = {
-      'On the {C:attention}final hand{} of round,',
-      'scored {C:attention}7s{} and {C:attention}4s{} give {C:mult}+#1#{} Mult',
+      'Final hand of round: scored',
+      '{C:attention}7s{} and {C:attention}4s{} give {C:mult}+#1#{} Mult',
       '{C:cg_ink,f:cg_ghost}The lamp by the door shows them the way.{}',
     } },
     ['zh_CN'] = { name = '守夜', text = {
-      '本回合{C:attention}最后一手{}，',
+      '本回合{C:attention}最后一手{}：',
       '计分的 {C:attention}7{} 和 {C:attention}4{} {C:mult}+#1#{} 倍率',
       '{C:cg_ink,f:cg_ghost}門口那盞燈，是給好兄弟認路的。{}',
     } },
@@ -1140,13 +1141,11 @@ CG.J {
   config = {},
   loc_txt = {
     ['en-us'] = { name = 'Unopened Invitation', text = {
-      'Arrives face down',
       'At {C:red}7{} Dread, opens into',
       'a random {C:red}Rare{} Joker',
       '{C:cg_ink,f:cg_ghost}A Pudu invitation. You are the guest.{}',
     } },
     ['zh_CN'] = { name = '阴间帖', text = {
-      '背面朝上送来',
       '恐惧到 {C:red}7{} 时拆开，',
       '变成随机{C:red}稀有{}小丑',
       '{C:cg_ink,f:cg_ghost}普渡的請帖。你是被請的那個。{}',
@@ -1169,14 +1168,13 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Heirloom', text = {
       '{X:mult,C:white} X#1# {} Mult',
-      'Pass it on: returns with',
-      '{X:mult,C:white} +X#2# {} and an {C:dark_edition}Edition{}',
+      'Returns with {X:mult,C:white} +X#2# {}',
+      'and an {C:dark_edition}Edition{}',
       '{C:cg_ink,f:cg_ghost}Jade knows its owner. It is not you.{}',
     } },
     ['zh_CN'] = { name = '传家宝', text = {
       '{X:mult,C:white} X#1# {} 倍率',
-      '转送后回来时',
-      '{X:mult,C:white} +X#2# {} 并带{C:dark_edition}版本{}',
+      '转送回来时 {X:mult,C:white} +X#2# {} 并带{C:dark_edition}版本{}',
       '{C:cg_ink,f:cg_ghost}玉會認主。它認的不是你。{}',
     } },
   },
@@ -1202,14 +1200,12 @@ CG.J {
   config = {},
   loc_txt = {
     ['en-us'] = { name = 'Return Gift', text = {
-      'When a passed-on card {C:attention}returns{}',
-      'or after {C:attention}It{} comes,',
+      'When a card {C:attention}returns{} or {C:attention}It{} comes,',
       'create a {C:spectral}Spectral{} card',
       '{C:cg_ink,f:cg_ghost}Fed well, they give a little back.{}',
     } },
     ['zh_CN'] = { name = '回礼', text = {
-      '转送的牌{C:attention}回来{}，',
-      '或{C:attention}它{}来过之后，',
+      '有牌{C:attention}回来{}或{C:attention}它{}来过后，',
       '生成一张{C:spectral}幻灵牌{}',
       '{C:cg_ink,f:cg_ghost}好兄弟吃飽了，會還你一點東西。{}',
     } },
@@ -1255,14 +1251,12 @@ SMODS.Consumable {
   cost = 4, unlocked = true, discovered = true,
   loc_txt = {
     ['en-us'] = { name = 'Seance', text = {
-      'Revive the last {C:attention}destroyed{} Joker',
-      '{C:inactive}(#1#){}',
-      'It comes back {C:red}Cursed{}',
+      'Revive the last {C:attention}destroyed{}',
+      'Joker {C:inactive}(#1#){}, {C:red}Cursed{}',
       '{C:cg_ink,f:cg_ghost}It remembers who asked.{}',
     } },
     ['zh_CN'] = { name = '牵亡', text = {
-      '召回最近被{C:attention}销毁{}的小丑',
-      '{C:inactive}（#1#）{}',
+      '召回最近被{C:attention}销毁{}的小丑{C:inactive}（#1#）{}',
       '它会带着{C:red}诅咒{}回来',
       '{C:cg_ink,f:cg_ghost}它也記得是誰問的。{}',
     } },
@@ -1299,7 +1293,7 @@ if os.getenv('CG_TEST') then
     if not done then
       done = true
       local dw, dh = love.window.getDesktopDimensions()
-      local demo = os.getenv('CG_TEST') == 'demo'
+      local demo = os.getenv('CG_TEST') == 'demo' or os.getenv('CG_TEST') == 'polish'
       local w, h = demo and 960 or 640, demo and 540 or 400
       love.window.setMode(w, h, { fullscreen = false, resizable = true, highdpi = not demo, x = dw - w - 10, y = dh - h - 40 })
       love.resize(love.graphics.getWidth(), love.graphics.getHeight())
@@ -1309,6 +1303,7 @@ if os.getenv('CG_TEST') then
 end
 
 if os.getenv('CG_TEST') == 'fx' then assert(SMODS.load_file('test_fx.lua'))()
+elseif os.getenv('CG_TEST') == 'polish' then assert(SMODS.load_file('test_polish.lua'))()
 elseif os.getenv('CG_TEST') == 'interact' then assert(SMODS.load_file('test_interact.lua'))()
 elseif os.getenv('CG_TEST') == 'tw' then assert(SMODS.load_file('test_tw.lua'))()
 elseif os.getenv('CG_TEST') == 'whisper' then assert(SMODS.load_file('test_whisper.lua'))()

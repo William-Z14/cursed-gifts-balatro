@@ -33,14 +33,12 @@ CG.J {
   config = { extra = { mult = 4, xmult = 2, up = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Moon Blocks', text = {
-      '{C:mult}+#1#{} Mult',
-      'If hand contains a {C:attention}Pair{}, cast:',
+      '{C:mult}+#1#{} Mult. With a {C:attention}Pair{}, cast:',
       '{C:green}1 in 2{} {X:mult,C:white} X#2# {}, {C:green}1 in 4{} {C:red}+#3#{} Dread',
       '{C:cg_ink,f:cg_ghost}Ask again.{}',
     } },
     ['zh_CN'] = { name = '掷筊', text = {
-      '{C:mult}+#1#{} 倍率',
-      '牌型含{C:attention}对子{}时掷筊：',
+      '{C:mult}+#1#{} 倍率，含{C:attention}对子{}时掷筊：',
       '{C:green}1/2{} {X:mult,C:white} X#2# {}，{C:green}1/4{} {C:red}+#3#{} 恐惧',
       '{C:cg_ink,f:cg_ghost}再問一次。{}',
     } },
@@ -114,14 +112,13 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Mo-sin-a', text = {
       'Scored {C:attention}face{} cards: {C:green}#1# in #2#{}',
-      'to vanish, giving {X:mult,C:white} +X#3# {} Mult',
-      'They return as {C:attention}Stone{} cards',
+      'vanish for {X:mult,C:white} +X#3# {} Mult,',
+      'return as {C:attention}Stone{}',
       '{C:cg_ink,f:cg_ghost}They found him with grass in his mouth.{}',
     } },
     ['zh_CN'] = { name = '魔神仔', text = {
-      '计分的{C:attention}人头牌{} {C:green}#1#/#2#{} 被牵走，',
-      '每张 {X:mult,C:white} +X#3# {} 倍率',
-      '之后变成{C:attention}石头牌{}回来',
+      '计分的{C:attention}人头牌{} {C:green}#1#/#2#{} 被牵走',
+      '每张 {X:mult,C:white} +X#3# {}，变成{C:attention}石头牌{}回来',
       '{C:cg_ink,f:cg_ghost}找到的時候，嘴裡塞滿了草。{}',
     } },
   },
@@ -175,14 +172,12 @@ CG.J {
   config = { extra = { per = 0.5 } },
   loc_txt = {
     ['en-us'] = { name = 'Water Ghost', text = {
-      '{X:mult,C:white} +X#1# {} Mult per Joker',
-      'destroyed {C:inactive}(Its victims count twice){}',
+      '{X:mult,C:white} +X#1# {} Mult per Joker destroyed',
       '{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive}){}',
       '{C:cg_ink,f:cg_ghost}It is waiting for a replacement too.{}',
     } },
     ['zh_CN'] = { name = '水鬼', text = {
-      '每有小丑被销毁 {X:mult,C:white} +X#1# {}',
-      '{C:inactive}（被它带走的算两次）{}',
+      '每有小丑被销毁 {X:mult,C:white} +X#1# {} 倍率',
       '{C:inactive}（当前 {X:mult,C:white} X#2# {C:inactive}）{}',
       '{C:cg_ink,f:cg_ghost}它也在等交替。{}',
     } },
@@ -204,14 +199,12 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Zhong Kui Dance', text = {
       'Scored {C:attention}Kings{} give {X:mult,C:white} X#1# {} Mult',
-      'When {C:attention}It{} comes, drives it off',
-      'and shatters',
+      'Drives off {C:attention}It{} once, then shatters',
       '{C:cg_ink,f:cg_ghost}The dancer must not look back.{}',
     } },
     ['zh_CN'] = { name = '跳钟馗', text = {
       '计分的 {C:attention}K{} {X:mult,C:white} X#1# {} 倍率',
-      '{C:attention}它{}来时替你赶走它，',
-      '然后碎掉',
+      '替你赶走{C:attention}它{}一次，然后碎掉',
       '{C:cg_ink,f:cg_ghost}跳的人不能回頭。{}',
     } },
   },
