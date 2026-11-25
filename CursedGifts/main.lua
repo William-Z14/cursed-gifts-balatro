@@ -275,10 +275,9 @@ end
 
 -- 画面暗下来，点一张小丑交出去；CHOOSE_TIME 秒不选，它自己挑
 function CG.start_choose(pool, pause)
-  CG.choosing = { pool = pool, pause = pause, t = CG.CHOOSE_TIME, pulse = 0 }
+  CG.choosing = { pool = pool, pause = pause, t = CG.CHOOSE_TIME, pulse = 0, say = 0 }
   CG.t.silence = CG.CHOOSE_TIME + pause
   CG.t.heart = CG.CHOOSE_TIME + pause + 2.5
-  story_text(CG.B('GIVE IT ONE', '交一個出去'), 1.1, -0.6, HEX('ff3b3b'), CG.CHOOSE_TIME - 0.6, G.C.BLACK)
   CG.play('footstep', 0.8, 0.8)
 end
 
@@ -317,6 +316,7 @@ function CG.take_you()
   story_text(CG.B('YOU ARE THE REPLACEMENT', '你成了交替'), 1.3, -0.5, HEX('ff3b3b'), 3.2, G.C.BLACK)
   G.E_MANAGER:add_event(Event({ trigger = 'after', delay = 3, timer = 'REAL', blocking = false, blockable = false, func = function()
     if not G.GAME or G.STATE == G.STATES.GAME_OVER then return true end
+    if G.GAME.blind and G.P_BLINDS.bl_cg_it then G.GAME.blind.config.blind = G.P_BLINDS.bl_cg_it end -- 结算框：被它带走
     G.STATE = G.STATES.GAME_OVER
     if not G.GAME.won and not G.GAME.seeded and not G.GAME.challenge then
       G.PROFILES[G.SETTINGS.profile].high_scores.current_streak.amt = 0
@@ -614,6 +614,11 @@ function Game:update(dt)
       c.pulse = 0.9
       for _, j in ipairs(c.pool) do if not j.removed then j:juice_up(0.12, 0.12) end end
     end
+    c.say = c.say - dt
+    if c.say <= 0 and c.t > 0.8 then -- 「交一個出去」一明一暗地反复出现；选完就不再出，不会和「它来了」叠在一起
+      c.say = 1.5
+      story_text(CG.B('GIVE IT ONE', '交一個出去'), 1.1, -0.6, HEX('ff3b3b'), 0.7, G.C.BLACK)
+    end
     if c.t <= 0 or not G.jokers then CG.choose(nil) end
   end
   if CG.t.impact and not G.SETTINGS.paused then
@@ -668,8 +673,9 @@ end
 function CG.crt_vars(v)
   local boost, glitch = 0, 0
   if CG.on('ambience') and G.STAGE == G.STAGES.RUN and CG.dread() >= 9 then
-    boost = 0.04 * (CG.dread() - 8)
+    boost = math.min(0.12, 0.04 * (CG.dread() - 8)) -- 封顶：再亮画面会发灰过曝
   end
+  if CG.choosing then boost = 0 end -- 选人那几秒画面要压暗、字要看得清
   if CG.t.flash > 0 and CG.on('flash') then
     glitch = CG.t.flash * 0.6 -- 原来 *2 会把整屏刷白，像跳吓
     boost = boost + 0.3 * CG.t.flash
@@ -741,20 +747,16 @@ CG.J {
   config = { extra = { dollars = 20, dread = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Red Envelope', text = {
-      '{C:red}Cursed.{} When obtained, gain {C:money}$#1#{}',
-      'Each scored {C:hearts}Heart{} or {C:diamonds}Diamond{} earns {C:money}$1{}',
-      'Adds {C:red}+#2#{} Dread at end of round',
-      'Can only be {C:attention}passed on{} (sell).',
-      'It returns after {C:attention}3{} rounds',
+      'Gain {C:money}$#1#{} when obtained',
+      'Scored {C:hearts}Hearts{} and {C:diamonds}Diamonds{} give {C:money}$1{}',
+      '{C:red}+#2#{} Dread each round',
       '{C:cg_ink,f:cg_ghost}Pick it up, and you said yes to the wedding.{}',
     } },
     ['zh_CN'] = { name = '路边红包', text = {
-      '{C:red}诅咒。{}获得时 {C:money}+$#1#{}',
-      '每张计分的{C:hearts}红心{}或{C:diamonds}方块{} {C:money}+$1{}',
-      '回合结束时 {C:red}+#2#{} 恐惧',
-      '只能{C:attention}转送{}（卖出），',
-      '{C:attention}3{} 回合后它会回来',
-      '{C:cg_ink,f:cg_ghost}捡起来，就是答应了这门亲事。{}',
+      '获得时 {C:money}+$#1#{}',
+      '计分的{C:hearts}红心{}和{C:diamonds}方块{} {C:money}+$1{}',
+      '每回合 {C:red}+#2#{} 恐惧',
+      '{C:cg_ink,f:cg_ghost}撿起來，就是答應了這門親事。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -786,18 +788,16 @@ CG.J {
   config = { extra = { xmult = 3, step = 0.5 } },
   loc_txt = {
     ['en-us'] = { name = "Monkey's Paw", text = {
-      '{C:red}Cursed.{} {X:mult,C:white} X#1# {} Mult',
+      '{X:mult,C:white} X#1# {} Mult',
       'At end of round, destroys the',
-      '{C:attention}lowest ranked{} card held in hand',
-      'Returns with {X:mult,C:white} +X#2# {}',
+      '{C:attention}lowest{} ranked card in hand',
       '{C:cg_ink,f:cg_ghost}Borrowed luck must be paid back.{}',
     } },
     ['zh_CN'] = { name = '猴爪', text = {
-      '{C:red}诅咒。{}{X:mult,C:white} X#1# {} 倍率',
-      '回合结束时，销毁手牌中',
-      '{C:attention}点数最小{}的一张',
-      '回来时 {X:mult,C:white} +X#2# {}',
-      '{C:cg_ink,f:cg_ghost}借来的运，要还的。{}',
+      '{X:mult,C:white} X#1# {} 倍率',
+      '回合结束时销毁',
+      '手牌中{C:attention}点数最小{}的一张',
+      '{C:cg_ink,f:cg_ghost}借來的運，要還的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -829,14 +829,14 @@ CG.J {
   config = { extra = { per = 0.15 } },
   loc_txt = {
     ['en-us'] = { name = 'Under the Bed', text = {
-      '{X:mult,C:white} X#1# {} Mult for every point of Dread',
+      '{X:mult,C:white} X#1# {} Mult per Dread',
       '{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive}){}',
       "{C:cg_ink,f:cg_ghost}Don't point your shoes at the bed.{}",
     } },
     ['zh_CN'] = { name = '床底下', text = {
-      '每 1 点恐惧，{X:mult,C:white} X#1# {} 倍率',
+      '每点恐惧 {X:mult,C:white} X#1# {} 倍率',
       '{C:inactive}（当前 {X:mult,C:white} X#2# {C:inactive}）{}',
-      '{C:cg_ink,f:cg_ghost}鞋尖别朝着床。{}',
+      '{C:cg_ink,f:cg_ghost}鞋尖別朝著床。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -856,19 +856,16 @@ CG.J {
   config = { extra = { per = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Exorcist', text = {
-      'Sell this card to {C:attention}destroy{} every',
-      '{C:red}Cursed{} Joker and lift all curses',
-      'still on their way back',
-      'Earn {C:money}$#1#{} per Dread, then reset Dread',
+      'Sell this to destroy all {C:red}Cursed{} Jokers',
+      'and earn {C:money}$#1#{} per Dread, then reset it',
       '{C:inactive}(Currently {C:money}$#2#{C:inactive}){}',
       '{C:cg_ink,f:cg_ghost}He takes the fee. And the bad luck.{}',
     } },
     ['zh_CN'] = { name = '法师', text = {
-      '卖掉这张牌：{C:attention}销毁{}所有{C:red}诅咒{}小丑，',
-      '并解除所有还在回来路上的诅咒',
-      '每 1 点恐惧得 {C:money}$#1#{}，然后恐惧清零',
+      '卖掉：销毁所有{C:red}诅咒{}小丑，',
+      '每点恐惧 {C:money}+$#1#{}，然后恐惧清零',
       '{C:inactive}（当前 {C:money}$#2#{C:inactive}）{}',
-      '{C:cg_ink,f:cg_ghost}红包收了，煞也带走了。{}',
+      '{C:cg_ink,f:cg_ghost}紅包收了，煞也帶走了。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -904,16 +901,16 @@ CG.J {
   config = { extra = { xmult = 2, step = 0.5, dread = 1 } },
   loc_txt = {
     ['en-us'] = { name = 'Porcelain Doll', text = {
-      '{C:red}Cursed.{} {X:mult,C:white} X#1# {} Mult if played hand',
-      'contains a {C:attention}Pair{}',
-      'Adds {C:red}+#2#{} Dread at end of round',
-      "{C:cg_ink,f:cg_ghost}Not by the bed. Not in the seventh month.{}",
+      '{X:mult,C:white} X#1# {} Mult if played',
+      'hand contains a {C:attention}Pair{}',
+      '{C:red}+#2#{} Dread each round',
+      '{C:cg_ink,f:cg_ghost}Not by the bed. Not in the seventh month.{}',
     } },
     ['zh_CN'] = { name = '瓷娃娃', text = {
-      '{C:red}诅咒。{}打出的牌型含{C:attention}对子{}时',
+      '牌型含{C:attention}对子{}时',
       '{X:mult,C:white} X#1# {} 倍率',
-      '回合结束时 {C:red}+#2#{} 恐惧',
-      '{C:cg_ink,f:cg_ghost}七月，别把它摆在床头。{}',
+      '每回合 {C:red}+#2#{} 恐惧',
+      '{C:cg_ink,f:cg_ghost}七月，別把它擺在床頭。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -980,16 +977,16 @@ CG.J {
   config = { extra = { mult = 4, dread = 1 } },
   loc_txt = {
     ['en-us'] = { name = 'Chain Letter', text = {
-      '{C:red}Cursed.{} {C:mult}+#1#{} Mult for each Joker you have',
+      '{C:mult}+#1#{} Mult per Joker',
+      '{C:red}+#3#{} Dread each round',
       '{C:inactive}(Currently {C:mult}+#2#{C:inactive}){}',
-      'Adds {C:red}+#3#{} Dread at end of round',
-      '{C:inactive}(Pass it on.){}',
+      '{C:cg_ink,f:cg_ghost}Pass it on.{}',
     } },
     ['zh_CN'] = { name = '连锁信', text = {
-      '{C:red}诅咒。{}每有 1 张小丑，{C:mult}+#1#{} 倍率',
+      '每张小丑 {C:mult}+#1#{} 倍率',
+      '每回合 {C:red}+#3#{} 恐惧',
       '{C:inactive}（当前 {C:mult}+#2#{C:inactive}）{}',
-      '回合结束时 {C:red}+#3#{} 恐惧',
-      '{C:inactive}（转给下一个人。）{}',
+      '{C:cg_ink,f:cg_ghost}轉給下一個人。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -1013,17 +1010,16 @@ CG.J {
   config = { extra = { rounds = 3, held = 0, dread = 3 } },
   loc_txt = {
     ['en-us'] = { name = 'Paper Effigy', text = {
-      '{C:attention}Gift.{} Copies the ability of',
-      'the Joker to its {C:attention}left{}',
-      'Burns itself after {C:attention}#1#{} more round(s),',
-      'leaving a {C:tarot}Tarot{} card {C:inactive}(and {C:red}+#2#{C:inactive} Dread){}',
+      'Copies the Joker to its {C:attention}left{}',
+      'Burns in {C:attention}#1#{} rounds, leaving',
+      'a {C:tarot}Tarot{} card {C:inactive}({C:red}+#2#{C:inactive} Dread){}',
       '{C:cg_ink,f:cg_ghost}Made to take your place.{}',
     } },
     ['zh_CN'] = { name = '纸人', text = {
-      '{C:attention}礼物。{}复制{C:attention}左边{}小丑的能力',
-      '再过 {C:attention}#1#{} 回合会自燃，',
-      '留下一张{C:tarot}塔罗牌{}{C:inactive}（并 {C:red}+#2#{C:inactive} 恐惧）{}',
-      '{C:cg_ink,f:cg_ghost}扎来替你挡煞的。{}',
+      '复制{C:attention}左边{}的小丑',
+      '{C:attention}#1#{} 回合后烧掉，留下一张',
+      '{C:tarot}塔罗牌{}{C:inactive}（{C:red}+#2#{C:inactive} 恐惧）{}',
+      '{C:cg_ink,f:cg_ghost}紮來替你擋煞的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -1052,17 +1048,14 @@ CG.J {
   config = { extra = { dollars = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Joss Paper', text = {
-      'Whenever you sell {C:attention}any card{}',
-      '{C:inactive}(Jokers, Tarots, Planets...){},',
-      'earn {C:money}$#1#{} and gain {C:red}+1{} Dread',
-      '{C:cg_ink,f:cg_ghost}Silver for the brothers, gold for the gods.{}',
-      '{C:cg_ink,f:cg_ghost}Do not mix them up.{}',
+      'Sell any card:',
+      '{C:money}+$#1#{} and {C:red}+1{} Dread',
+      '{C:cg_ink,f:cg_ghost}Silver for the dead, gold for the gods.{}',
     } },
     ['zh_CN'] = { name = '纸钱', text = {
-      '每卖掉{C:attention}任何一张牌{}',
-      '{C:inactive}（小丑、塔罗、星球……）{}，',
+      '卖掉任何一张牌：',
       '{C:money}+$#1#{}，{C:red}+1{} 恐惧',
-      '{C:cg_ink,f:cg_ghost}银纸烧给好兄弟，金纸烧给神。别烧错。{}',
+      '{C:cg_ink,f:cg_ghost}銀紙燒給好兄弟，金紙燒給神。{}',
     } },
   },
   loc_vars = function(self, info_queue, card) return { vars = { card.ability.extra.dollars } } end,
@@ -1080,16 +1073,14 @@ CG.J {
   config = { extra = { mult = 7 } },
   loc_txt = {
     ['en-us'] = { name = 'Night Watch', text = {
-      'On the {C:attention}final hand{} of the round,',
-      'each scored {C:attention}7{} or {C:attention}4{}',
-      'gives {C:mult}+#1#{} Mult',
+      'On the {C:attention}final hand{} of round,',
+      'scored {C:attention}7s{} and {C:attention}4s{} give {C:mult}+#1#{} Mult',
       '{C:cg_ink,f:cg_ghost}The lamp by the door shows them the way.{}',
     } },
     ['zh_CN'] = { name = '守夜', text = {
-      '本回合{C:attention}最后一手牌{}时，',
-      '每张计分的 {C:attention}7{} 和 {C:attention}4{}',
-      '{C:mult}+#1#{} 倍率',
-      '{C:cg_ink,f:cg_ghost}门口那盏灯，是给好兄弟认路的。{}',
+      '本回合{C:attention}最后一手{}，',
+      '计分的 {C:attention}7{} 和 {C:attention}4{} {C:mult}+#1#{} 倍率',
+      '{C:cg_ink,f:cg_ghost}門口那盞燈，是給好兄弟認路的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -1149,16 +1140,16 @@ CG.J {
   config = {},
   loc_txt = {
     ['en-us'] = { name = 'Unopened Invitation', text = {
-      '{C:attention}Gift.{} Arrives face down.',
-      'Opens itself at {C:red}7{} Dread and becomes',
+      'Arrives face down',
+      'At {C:red}7{} Dread, opens into',
       'a random {C:red}Rare{} Joker',
       '{C:cg_ink,f:cg_ghost}A Pudu invitation. You are the guest.{}',
     } },
     ['zh_CN'] = { name = '阴间帖', text = {
-      '{C:attention}礼物。{}背面朝上。',
-      '恐惧到 {C:red}7{} 时自己拆开，',
-      '变成一张随机{C:red}稀有{}小丑',
-      '{C:cg_ink,f:cg_ghost}普渡的请帖。你是被请的那个。{}',
+      '背面朝上送来',
+      '恐惧到 {C:red}7{} 时拆开，',
+      '变成随机{C:red}稀有{}小丑',
+      '{C:cg_ink,f:cg_ghost}普渡的請帖。你是被請的那個。{}',
     } },
   },
   add_to_deck = function(self, card, from_debuff)
@@ -1177,16 +1168,16 @@ CG.J {
   config = { extra = { xmult = 1.5, step = 0.5 } },
   loc_txt = {
     ['en-us'] = { name = 'Heirloom', text = {
-      '{C:attention}Gift.{} {X:mult,C:white} X#1# {} Mult',
-      'Pass it on: it returns in {C:attention}2{} rounds',
-      'with {X:mult,C:white} +X#2# {} and a random {C:dark_edition}Edition{}',
+      '{X:mult,C:white} X#1# {} Mult',
+      'Pass it on: returns with',
+      '{X:mult,C:white} +X#2# {} and an {C:dark_edition}Edition{}',
       '{C:cg_ink,f:cg_ghost}Jade knows its owner. It is not you.{}',
     } },
     ['zh_CN'] = { name = '传家宝', text = {
-      '{C:attention}礼物。{}{X:mult,C:white} X#1# {} 倍率',
-      '转送后 {C:attention}2{} 回合回来，',
-      '{X:mult,C:white} +X#2# {}，并带一个随机{C:dark_edition}版本{}',
-      '{C:cg_ink,f:cg_ghost}玉会认主。它认的不是你。{}',
+      '{X:mult,C:white} X#1# {} 倍率',
+      '转送后回来时',
+      '{X:mult,C:white} +X#2# {} 并带{C:dark_edition}版本{}',
+      '{C:cg_ink,f:cg_ghost}玉會認主。它認的不是你。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -1211,16 +1202,16 @@ CG.J {
   config = {},
   loc_txt = {
     ['en-us'] = { name = 'Return Gift', text = {
-      'Whenever a passed-on card {C:attention}comes back{},',
-      'or after {C:attention}It{} comes, create a {C:spectral}Spectral{} card',
-      '{C:inactive}(Must have room){}',
+      'When a passed-on card {C:attention}returns{}',
+      'or after {C:attention}It{} comes,',
+      'create a {C:spectral}Spectral{} card',
       '{C:cg_ink,f:cg_ghost}Fed well, they give a little back.{}',
     } },
     ['zh_CN'] = { name = '回礼', text = {
-      '每当有转送的牌{C:attention}回来{}，或{C:attention}它{}来过之后，',
+      '转送的牌{C:attention}回来{}，',
+      '或{C:attention}它{}来过之后，',
       '生成一张{C:spectral}幻灵牌{}',
-      '{C:inactive}（必须有空位）{}',
-      '{C:cg_ink,f:cg_ghost}好兄弟吃饱了，会还你一点东西。{}',
+      '{C:cg_ink,f:cg_ghost}好兄弟吃飽了，會還你一點東西。{}',
     } },
   },
 }
@@ -1231,17 +1222,16 @@ CG.J {
   config = { extra = { per = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Footsteps', text = {
-      'Each played {C:attention}4{} adds {C:red}+1{} Dread',
-      '{C:mult}+#2#{} Mult for every point of Dread',
+      'Each played {C:attention}4{}: {C:red}+1{} Dread',
+      '{C:mult}+#2#{} Mult per Dread',
       '{C:inactive}(Currently {C:mult}+#1#{C:inactive}){}',
-      '{C:cg_ink,f:cg_ghost}Ash by the door. On the seventh morning,{}',
-      '{C:cg_ink,f:cg_ghost}footprints. Inward.{}',
+      '{C:cg_ink,f:cg_ghost}Footprints in the ash. Pointing inward.{}',
     } },
     ['zh_CN'] = { name = '脚步声', text = {
-      '每打出一张 {C:attention}4{} {C:red}+1{} 恐惧',
-      '每 1 点恐惧 {C:mult}+#2#{} 倍率',
+      '每打出一张 {C:attention}4{}：{C:red}+1{} 恐惧',
+      '每点恐惧 {C:mult}+#2#{} 倍率',
       '{C:inactive}（当前 {C:mult}+#1#{C:inactive}）{}',
-      '{C:cg_ink,f:cg_ghost}门口撒了灰。头七早上，脚印朝屋里。{}',
+      '{C:cg_ink,f:cg_ghost}頭七早上，灰上的腳印朝屋裡。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
@@ -1265,16 +1255,16 @@ SMODS.Consumable {
   cost = 4, unlocked = true, discovered = true,
   loc_txt = {
     ['en-us'] = { name = 'Seance', text = {
-      'Bring back the last {C:attention}destroyed{} Joker',
+      'Revive the last {C:attention}destroyed{} Joker',
       '{C:inactive}(#1#){}',
       'It comes back {C:red}Cursed{}',
-      '{C:cg_ink,f:cg_ghost}Ask, and it answers. It remembers who asked.{}',
+      '{C:cg_ink,f:cg_ghost}It remembers who asked.{}',
     } },
     ['zh_CN'] = { name = '牵亡', text = {
-      '召回最近一张被{C:attention}销毁{}的小丑',
+      '召回最近被{C:attention}销毁{}的小丑',
       '{C:inactive}（#1#）{}',
       '它会带着{C:red}诅咒{}回来',
-      '{C:cg_ink,f:cg_ghost}你问了，它就会答。它也记得是谁问的。{}',
+      '{C:cg_ink,f:cg_ghost}它也記得是誰問的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)

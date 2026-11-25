@@ -32,6 +32,16 @@ SMODS.Blind {
   in_pool = function() return false end,
 }
 
+-- 「它」：第三次带走你时，结算框的「击败者」写它（不然关卡已结束，原版会显示 ERROR）
+SMODS.Blind {
+  key = 'it', atlas = 'blinds', pos = { x = 0, y = 1 }, discovered = true, mult = 2, dollars = 0, boss_colour = HEX('1a0608'),
+  loc_txt = {
+    ['en-us'] = { name = 'It', text = { 'It needed a replacement.' } },
+    ['zh_CN'] = { name = '它', text = { '它需要一个交替。' } },
+  },
+  in_pool = function() return false end,
+}
+
 -- 日历：换 Boss 的时候，到了日子就是它们
 local new_blind_ref = SMODS.get_new_blind
 function SMODS.get_new_blind(blind_type)

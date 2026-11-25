@@ -2,7 +2,7 @@
 -- 规则：
 --   · 讲规则的文字：按游戏语言显示（简体 / 繁体中文 / 英文），用游戏原来的字体
 --   · 故事里的话（牌底小字、低语、「它来了」）：中文一律台湾繁体 + 霞鹜文楷 TC；
---     英文模式下保留繁体当氛围，下面加一行英文翻译（英文用游戏原字体，保证看得清）
+--     牌底小字在英文模式下只显示英文那一句（低语和「它来了」仍是繁体在上、英文在下）
 -- 繁体对照表由 tools/make_tw.py 生成（mod/tw_strings.lua）
 local CG = CursedGifts
 local utf8 = require('utf8') -- mod 加载时 utf8 还不是全局变量（11/25 崩过一次）
@@ -71,7 +71,7 @@ local function process(obj)
       if is_story(line) then trans[#trans + 1] = (line:gsub(',f:cg_ghost', '')) -- 英文翻译用游戏原字体，小字号下恐怖字体看不清
       else rules[#rules + 1] = line end
     end
-    for _, l in ipairs(story) do rules[#rules + 1] = l end
+    -- 11/25 用户：说明太长 → 英文模式只留英文那一句故事，不再叠一行繁体
     for _, l in ipairs(trans) do rules[#rules + 1] = l end
     en.text = rules
     en.cg_story_done = true

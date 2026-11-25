@@ -14,45 +14,34 @@ SMODS.Atlas { key = 'tags', path = 'tags.png', px = 34, py = 34 }
 local TIPS = {
   cg_dread = {
     ['en-us'] = { name = 'Dread', text = {
-      'Rises while you hold {C:red}Cursed{} gifts.',
-      'At {C:red}#1#{} Dread, {C:attention}It{} comes and',
-      'you give it one of your Jokers.',
-      'Each visit, it comes {C:attention}closer{}.',
-      'The third time, it takes {C:red}you{}.',
+      'At {C:red}#1#{}, {C:attention}It{} comes and you give it a Joker',
+      'Each visit it comes {C:attention}closer{}',
+      'The third time, it takes {C:red}you{}',
     } },
     ['zh_CN'] = { name = '恐惧', text = {
-      '身上有{C:red}诅咒{}礼物时会上涨',
-      '到 {C:red}#1#{} 时{C:attention}它{}会来，',
-      '你得交出一张小丑',
-      '它每来一次就{C:attention}更近{}一些，',
+      '到 {C:red}#1#{} 时{C:attention}它{}会来，你得交出一张小丑',
+      '它每来一次就{C:attention}更近{}一些',
       '第三次，它带走的是{C:red}你{}',
     } },
   },
   cg_gift_rule = {
-    ['en-us'] = { name = 'Cursed Gift', text = {
-      'Never sold in the shop:',
-      'it is {C:attention}given{} to you.',
-      "Can't be destroyed.",
-      'Adds Dread at end of round.',
+    ['en-us'] = { name = 'Cursed', text = {
+      'Never in the shop, only {C:attention}given{}',
+      "Can't be destroyed",
     } },
-    ['zh_CN'] = { name = '诅咒礼物', text = {
+    ['zh_CN'] = { name = '诅咒', text = {
       '商店不卖，只会被{C:attention}送{}来',
       '无法被销毁',
-      '回合结束时增加恐惧',
     } },
   },
   cg_pass_on = {
     ['en-us'] = { name = 'Passing On', text = {
-      '{C:red}Cursed{} and {C:attention}Gift{} cards sell for {C:money}$0{}.',
-      'Selling one passes it on:',
-      'it comes back in {C:attention}2-3{} rounds,',
-      'a little stronger.',
+      'Sells for {C:money}$0{}: selling passes it on',
+      'It returns in {C:attention}2-3{} rounds, stronger',
     } },
     ['zh_CN'] = { name = '转送', text = {
-      '{C:red}诅咒{}和{C:attention}礼物{}卖价为 {C:money}$0{}，',
-      '卖出就是转送：',
-      '{C:attention}2-3{} 回合后它会回来，',
-      '而且更强一点',
+      '卖价 {C:money}$0{}，卖出就是转送',
+      '{C:attention}2-3{} 回合后回来，更强一点',
     } },
   },
 }
@@ -141,13 +130,13 @@ SMODS.Back {
   key = 'ghost_month', atlas = 'extras', pos = { x = 0, y = 0 }, unlocked = true, discovered = true,
   loc_txt = {
     ['en-us'] = { name = 'Ghost Month Deck', text = {
-      'Start with a {C:red}Red Envelope{} on the doorstep',
-      'and {C:attention}4{} cards with a {C:attention}Talisman Seal{}',
+      'Start with a {C:red}Red Envelope{}',
+      'and {C:attention}4{} {C:attention}Talisman Seals{}',
       '{C:inactive}(The Ghost Month calendar is on){}',
     } },
     ['zh_CN'] = { name = '鬼月牌组', text = {
-      '开局门口就有一份{C:red}路边红包{}，',
-      '牌组里 {C:attention}4{} 张牌带{C:attention}符印{}',
+      '开局自带{C:red}路边红包{}',
+      '和 {C:attention}4{} 张{C:attention}符印{}牌',
       '{C:inactive}（鬼月日历开启）{}',
     } },
   },
@@ -237,15 +226,14 @@ legend {
   key = 'qiye_baye', pos = { x = 0, y = 0 }, soul_pos = { x = 0, y = 1 }, blueprint_compat = true,
   loc_txt = {
     ['en-us'] = { name = 'Lord Seven & Lord Eight', text = {
-      'If played hand contains a {C:attention}Pair{},',
-      '{C:attention}retrigger{} every scored card',
-      '{C:cg_ink,f:cg_ghost}One tall, one short. One white, one black.{}',
+      'If hand contains a {C:attention}Pair{},',
+      '{C:attention}retrigger{} all scored cards',
       '{C:cg_ink,f:cg_ghost}Tonight they walk you home.{}',
     } },
     ['zh_CN'] = { name = '七爷八爷', text = {
-      '打出的牌型含{C:attention}对子{}时，',
-      '每张计分的牌{C:attention}再触发{}一次',
-      '{C:cg_ink,f:cg_ghost}一高一矮，一白一黑。今晚他們送你回家。{}',
+      '牌型含{C:attention}对子{}时，',
+      '计分的牌{C:attention}再触发{}一次',
+      '{C:cg_ink,f:cg_ghost}一高一矮，今晚送你回家。{}',
     } },
   },
   calculate = function(self, card, context)
@@ -260,13 +248,13 @@ legend {
   config = { extra = { x = 1, step = 0.2 } },
   loc_txt = {
     ['en-us'] = { name = 'City God', text = {
-      'Gains {X:mult,C:white} X#1# {} Mult for every',
-      'point of Dread {C:attention}lifted{} {C:inactive}(any way){}',
+      'Gains {X:mult,C:white} X#1# {} Mult per',
+      'point of Dread {C:attention}lifted{}',
       '{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive}){}',
-      '{C:cg_ink,f:cg_ghost}Every deed is written in his ledger.{}',
+      '{C:cg_ink,f:cg_ghost}Every deed is in his ledger.{}',
     } },
     ['zh_CN'] = { name = '城隍爷', text = {
-      '每{C:attention}消掉{} 1 点恐惧（任何方式），',
+      '每消掉 1 点恐惧',
       '获得 {X:mult,C:white} X#1# {} 倍率',
       '{C:inactive}（当前 {X:mult,C:white} X#2# {C:inactive}）{}',
       '{C:cg_ink,f:cg_ghost}善惡簿上，每一筆都記著。{}',
