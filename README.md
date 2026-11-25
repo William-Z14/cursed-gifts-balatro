@@ -5,6 +5,8 @@ In the seventh lunar month the gates of the underworld open. Someone leaves you 
 
 > ⚠️ **Content warning:** sudden sounds, screen flashes and distortion, and text about death and folk taboos. On first launch you choose **Ghost Month** (full horror) or **Gentle** (no flashes, no jump-scare sounds). You can change it any time in the mod's config.
 
+![Demo](screenshots/demo.gif)
+
 ![Cards](screenshots/cards.png)
 
 ## What it adds
