@@ -1,0 +1,15 @@
+[manifest]
+version = "1.0.0"
+dump_lua = true
+priority = 5
+
+# 音乐变调 / 静音：在推给声音线程之前改参数
+[[patches]]
+[patches.pattern]
+target = 'functions/misc_functions.lua'
+pattern = 'G.ARGS.push.ambient_control = G.SETTINGS.ambient_control'
+match_indent = true
+position = 'after'
+payload = '''
+if CursedGifts and CursedGifts.modulate then CursedGifts.modulate(G.ARGS.push) end
+'''
