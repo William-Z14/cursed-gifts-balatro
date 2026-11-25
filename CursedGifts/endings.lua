@@ -155,6 +155,10 @@ quip { key = 'lq_water', type = 'loss', weight = 3,
   en = { "You'll get used", 'to the water.' }, zh = { '水里，', '会习惯的。' },
   when = function() return holding('j_cg_water_ghost') end, who = function() return 'j_cg_water_ghost' end }
 
+quip { key = 'lq_replaced', type = 'loss', weight = 12,
+  en = { 'Thank you.', 'Your turn to wait.' }, zh = { '谢谢你。', '换你等了。' },
+  when = function() return G.GAME.cg_replaced end, who = function() return taken_key() or 'j_cg_water_ghost' end }
+
 -- 赢
 local function elder() return holding('j_cg_exorcist') or leftmost() end
 quip { key = 'wq_page', type = 'win', weight = 3,

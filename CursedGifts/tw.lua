@@ -80,7 +80,7 @@ end
 
 local function mine(key) return type(key) == 'string' and (key:find('^j_cg_') or key:find('^c_cg_') or key:find('^cg_')) end
 
-for _, tbl in ipairs { SMODS.Centers or {}, SMODS.Stickers or {}, SMODS.JimboQuips or {}, SMODS.Challenges or {} } do
+for _, tbl in ipairs { SMODS.Centers or {}, SMODS.Stickers or {}, SMODS.JimboQuips or {}, SMODS.Challenges or {}, SMODS.Blinds or {}, SMODS.Seals or {}, SMODS.Tags or {} } do
   for key, obj in pairs(tbl) do
     if type(obj) == 'table' and (mine(key) or obj.mod == CG.mod) then process(obj) end
   end

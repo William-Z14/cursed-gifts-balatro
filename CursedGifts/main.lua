@@ -5,7 +5,9 @@ CursedGifts = CursedGifts or {}
 if os.getenv('CG_TEST') or os.getenv('CG_ENDINGS') or os.getenv('CG_MEMORY') then
   pcall(function()
     local dw, dh = love.window.getDesktopDimensions()
-    love.window.setMode(640, 400, { fullscreen = false, resizable = true, highdpi = true, x = dw - 650, y = dh - 440 })
+    local demo = os.getenv('CG_TEST') == 'demo' -- 录演示：1280x720、不放大像素
+    local w, h = demo and 960 or 640, demo and 540 or 400
+    love.window.setMode(w, h, { fullscreen = false, resizable = true, highdpi = not demo, x = dw - w - 10, y = dh - h - 40 })
   end)
 end
 local CG = CursedGifts
@@ -14,8 +16,14 @@ CG.cfg = CG.mod.config
 CG.THRESHOLD = 13
 CG.RETURN_ROUNDS = 3
 -- 挑战可以改「它来了」的门槛（G.GAME.modifiers.cg_threshold）
-function CG.threshold() return (G.GAME and G.GAME.modifiers and G.GAME.modifiers.cg_threshold) or CG.THRESHOLD end
-CG.ui = { text = '0/13' }
+-- 一次比一次近：每来过一次门槛 -2（13 → 11 → 9）；第 3 次来，它拿的是你
+CG.STEP, CG.MAX_COMES = 2, 3
+function CG.came() return (G.GAME and G.GAME.cg_came) or 0 end
+function CG.threshold()
+  local base = (G.GAME and G.GAME.modifiers and G.GAME.modifiers.cg_threshold) or CG.THRESHOLD
+  return base - CG.STEP * math.min(CG.came(), CG.MAX_COMES - 1)
+end
+CG.ui = { text = '0/13', marks = '' }
 CG.t = { heart = 0, flash = 0, silence = 0 }
 
 CG.ORDER = {
@@ -108,10 +116,26 @@ function CG.msg(card, text, colour)
   end
 end
 
+-- 给一张消耗牌（塔罗 / 星球 / 幻灵），没空位就算了
+function CG.give(set, append)
+  if not G.consumeables or not G.GAME then return end
+  if #G.consumeables.cards + G.GAME.consumeable_buffer >= G.consumeables.config.card_limit then return end
+  G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
+  G.E_MANAGER:add_event(Event({ func = function()
+    SMODS.add_card { set = set, key_append = append }
+    G.GAME.consumeable_buffer = math.max(0, G.GAME.consumeable_buffer - 1)
+    return true
+  end }))
+  return true
+end
+
 ---------------------------------------------------------------- 恐惧值界面
 
 function CG.update_ui()
   CG.ui.text = tostring(CG.dread()) .. '/' .. CG.threshold()
+  -- 恐惧条旁边 3 个记号：来过几次就划掉几个，最后一个是你
+  local c = math.min(CG.came(), CG.MAX_COMES)
+  CG.ui.marks = ' ' .. ('X'):rep(c) .. ('-'):rep(CG.MAX_COMES - c)
 end
 
 function CG.make_ui()
@@ -122,6 +146,7 @@ function CG.make_ui()
       { n = G.UIT.R, config = { align = 'cm', padding = 0.06, r = 0.08, colour = HEX('3a0a0e'), emboss = 0.05, minw = 1.7 }, nodes = {
         { n = G.UIT.T, config = { text = CG.L('Dread ', '恐惧 '), scale = 0.32, colour = HEX('e8d8c0') } },
         { n = G.UIT.T, config = { ref_table = CG.ui, ref_value = 'text', scale = 0.32, colour = HEX('ff6b6b') } },
+        { n = G.UIT.T, config = { ref_table = CG.ui, ref_value = 'marks', scale = 0.3, colour = HEX('9a7d6a') } },
       } },
     } },
     config = { align = 'bm', offset = { x = 0, y = 0.12 }, major = G.jokers, bond = 'Weak' },
@@ -177,11 +202,18 @@ function CG.reset_dread()
   CG.tint()
 end
 
-function CG.pick_victim()
+-- 「它」能带走的：不是诅咒、不是永恒、不是残影
+function CG.candidates()
   local pool = {}
-  for _, j in ipairs(G.jokers.cards) do
-    if not CG.is_cursed(j) and not j.ability.eternal and not j.getting_sliced then pool[#pool + 1] = j end
+  for _, j in ipairs(G.jokers and G.jokers.cards or {}) do
+    if not CG.is_cursed(j) and not j.ability.eternal and not j.getting_sliced and not j.ability.cg_afterimage
+        and not j.removed then pool[#pool + 1] = j end
   end
+  return pool
+end
+
+function CG.pick_victim()
+  local pool = CG.candidates()
   if #pool == 0 then return nil end
   if G.GAME.cg_bride then return pool[#pool] end
   return pseudorandom_element(pool, pseudoseed('cg_itcomes'))
@@ -205,29 +237,110 @@ end
 --   ① 心跳停、音乐静音、背景沉到全黑，被选中的那张牌慢慢翻过去
 --   ② 爆发：尖音 + 红闪 + 画面撕裂 + 那张牌碎掉
 --   ③ 余波：安静两秒，心跳才回来
+CG.CHOOSE_TIME = 8
 function CG.it_comes()
   local speed = math.max(1, (G.SETTINGS and G.SETTINGS.GAMESPEED) or 1)
   local pause = 1.4 / math.sqrt(speed)
-  local victim
   -- 不在计分途中开演：等这手牌算完（blocking/blockable=false，每帧自己检查，不堵别的事件）
   G.E_MANAGER:add_event(Event({ blocking = false, blockable = false, func = function()
     if G.STATE == G.STATES.HAND_PLAYED or G.STATE == G.STATES.DRAW_TO_HAND or not G.jokers then return false end
+    if G.STATE == G.STATES.GAME_OVER then return true end
+    if CG.came() >= CG.MAX_COMES - 1 then CG.take_you(); return true end -- 第 3 次：它拿的是你
     CG.t.silence = pause
     CG.t.heart = pause + 2.5 -- 心跳停
-    victim = CG.pick_victim()
     if CG.on('ambience') then
       ease_background_colour { new_colour = HEX('0a0608'), special_colour = HEX('000000'), contrast = 3 }
     end
     for _, j in ipairs(G.jokers.cards) do j:juice_up(0.05, 0.05) end
-    CG.t.impact = pause
-    CG.t.impact_victim = victim
-    if victim then
-      victim.cg_marked = true
-      victim:juice_up(0.3, 0.3)
-      if victim.facing == 'front' then victim:flip() end -- 被选中的那张慢慢翻过去
-    end
+    local pool = CG.candidates()
+    -- 你亲手选交出谁（新娘已经定了、或只有一张可选时不用选）
+    if not G.GAME.cg_bride and #pool > 1 then CG.start_choose(pool, pause)
+    else CG.begin_impact(CG.pick_victim(), pause) end
     return true
   end }))
+end
+
+-- 选好了：那张牌慢慢翻过去，pause 秒后爆发
+function CG.begin_impact(victim, pause)
+  CG.t.silence = math.max(CG.t.silence, pause)
+  CG.t.heart = math.max(CG.t.heart, pause + 2.5)
+  CG.t.impact = pause
+  CG.t.impact_victim = victim
+  if victim then
+    victim.cg_marked = true
+    victim:juice_up(0.3, 0.3)
+    if victim.facing == 'front' then victim:flip() end
+  end
+end
+
+-- 画面暗下来，点一张小丑交出去；CHOOSE_TIME 秒不选，它自己挑
+function CG.start_choose(pool, pause)
+  CG.choosing = { pool = pool, pause = pause, t = CG.CHOOSE_TIME, pulse = 0 }
+  CG.t.silence = CG.CHOOSE_TIME + pause
+  CG.t.heart = CG.CHOOSE_TIME + pause + 2.5
+  story_text(CG.B('GIVE IT ONE', '交一個出去'), 1.1, -0.6, HEX('ff3b3b'), CG.CHOOSE_TIME - 0.6, G.C.BLACK)
+  CG.play('footstep', 0.8, 0.8)
+end
+
+function CG.choose(card)
+  local c = CG.choosing
+  if not c then return end
+  CG.choosing = nil
+  if not card or card.removed or card.area ~= G.jokers then card = CG.pick_victim() end
+  CG.begin_impact(card, c.pause)
+end
+
+-- 选人的时候：只有能交的小丑点得动
+local click_ref = Card.click
+function Card:click()
+  local c = CG.choosing
+  if c and self.area == G.jokers then
+    for _, j in ipairs(c.pool) do
+      if j == self then CG.choose(self); return end
+    end
+    return
+  end
+  return click_ref(self)
+end
+
+-- 第 3 次：你成了交替
+function CG.take_you()
+  G.GAME.cg_replaced = true
+  G.GAME.cg_came = CG.came() + 1
+  CG.update_ui()
+  CG.t.silence, CG.t.heart = 4, 8
+  if CG.on('ambience') then
+    ease_background_colour { new_colour = HEX('000000'), special_colour = HEX('000000'), contrast = 3 }
+  end
+  CG.play('sting', 0.8, 1)
+  CG.red_flash(0.8, 1.6)
+  story_text(CG.B('YOU ARE THE REPLACEMENT', '你成了交替'), 1.3, -0.5, HEX('ff3b3b'), 3.2, G.C.BLACK)
+  G.E_MANAGER:add_event(Event({ trigger = 'after', delay = 3, timer = 'REAL', blocking = false, blockable = false, func = function()
+    if not G.GAME or G.STATE == G.STATES.GAME_OVER then return true end
+    G.STATE = G.STATES.GAME_OVER
+    if not G.GAME.won and not G.GAME.seeded and not G.GAME.challenge then
+      G.PROFILES[G.SETTINGS.profile].high_scores.current_streak.amt = 0
+    end
+    G:save_settings()
+    G.FILE_HANDLER.force = true
+    G.STATE_COMPLETE = false
+    return true
+  end }))
+end
+
+-- 去处：原位留一回合残影（不生效、不能被带走），到下一回合结束才散
+function CG.afterimage(ghost, idx)
+  if not ghost or not G.jokers then return end
+  ghost.ability.cg_afterimage = true
+  ghost.cg_sold = true -- 散掉不算被销毁
+  SMODS.debuff_card(ghost, true, 'cg_afterimage')
+  G.jokers:emplace(ghost)
+  if idx and idx < #G.jokers.cards then
+    table.remove(G.jokers.cards, #G.jokers.cards)
+    table.insert(G.jokers.cards, idx, ghost)
+    G.jokers:set_ranks()
+  end
+  ghost.sell_cost, ghost.sell_cost_label = 0, 0
 end
 
 -- ② 爆发：由 Game:update 里的计时器准时调用，不排队，避免被回合结算动画拖后
@@ -242,17 +355,36 @@ function CG.impact(victim)
     -- 挂在屏幕中间，不挂在会碎掉的那张牌上
     story_text(victim and CG.B('IT CAME', '它来了') or CG.B('IT LOOKED AT YOU', '它看了你一眼'),
       1.6, -0.5, HEX('ff3b3b'), 1.8, G.C.BLACK)
+    local ghost, idx
     if victim and not victim.removed then
       if victim.facing == 'back' then victim:flip() end
       victim:juice_up(1.2, 1.2)
+      for k, j in ipairs(G.jokers.cards) do if j == victim then idx = k end end
+      ghost = copy_card(victim, nil, nil, nil, true) -- 残影：去掉版本的空壳（不 add_to_deck，没有效果）
       G.GAME.cg_last_destroyed = victim.config.center.key -- 碎掉不走 start_dissolve，手动记给招魂
+      G.GAME.cg_jdestroyed = (G.GAME.cg_jdestroyed or 0) + 2 -- 水鬼：它带走的算两次
       SMODS.destroy_cards({ victim }, {
         bypass_eternal = true, immediate = true, -- 不排队：否则排在结算动画后面，「它来了」出字后牌还好好的
         destroy_func = function(c) c:shatter(); return true end,
       })
     end
     G.GAME.cg_bride = nil
-    if victim then G.GAME.cg_w_taken = true end
+    if victim then
+      G.GAME.cg_w_taken = true
+      CG.afterimage(ghost, idx)
+      -- 它留下回礼：一张幻灵牌（回礼小丑再多给一张）
+      G.E_MANAGER:add_event(Event({ trigger = 'after', delay = 1.9, timer = 'REAL', blocking = false, blockable = false, func = function()
+        if not G.GAME or not G.jokers then return true end
+        story_text(CG.B('Thank you.', '謝謝你。'), 0.9, -0.2, HEX('e8d8c0'), 2.2)
+        CG.give('Spectral', 'cg_it')
+        for _, j in ipairs(G.jokers.cards) do
+          if j.config.center.key == 'j_cg_return_gift' and not j.debuff and CG.give('Spectral', 'cg_rg') then
+            CG.msg(j, CG.L('A gift in return', '回礼'), G.C.SECONDARY_SET.Spectral)
+          end
+        end
+        return true
+      end }))
+    end
     CG.reset_dread()
 end
 
@@ -311,15 +443,8 @@ function CG.bring_back(entry)
       if center.cg_on_return then center.cg_on_return(center, card) end
       -- 回礼：每当有牌回来，生成一张幻灵牌
       for _, j in ipairs(G.jokers.cards) do
-        if j.config.center.key == 'j_cg_return_gift' and not j.debuff
-            and #G.consumeables.cards + G.GAME.consumeable_buffer < G.consumeables.config.card_limit then
-          G.GAME.consumeable_buffer = G.GAME.consumeable_buffer + 1
-          G.E_MANAGER:add_event(Event({ func = function()
-            SMODS.add_card { set = 'Spectral', key_append = 'cg_rg' }
-            G.GAME.consumeable_buffer = 0
-            CG.msg(j, CG.L('A gift in return', '回礼'), G.C.SECONDARY_SET.Spectral)
-            return true
-          end }))
+        if j.config.center.key == 'j_cg_return_gift' and not j.debuff and CG.give('Spectral', 'cg_rg') then
+          CG.msg(j, CG.L('A gift in return', '回礼'), G.C.SECONDARY_SET.Spectral)
         end
       end
     end
@@ -360,8 +485,11 @@ end
 -- 记下最近一张被销毁（不是卖掉）的小丑，给招魂用
 local dissolve_ref = Card.start_dissolve
 function Card:start_dissolve(...)
-  if G.GAME and self.ability and self.ability.set == 'Joker' and not self.cg_sold and self.area == G.jokers then
+  if G.GAME and self.ability and self.ability.set == 'Joker' and not self.cg_sold and self.area == G.jokers
+      and not self.ability.cg_afterimage and not self.cg_counted then
+    self.cg_counted = true
     G.GAME.cg_last_destroyed = self.config.center.key
+    G.GAME.cg_jdestroyed = (G.GAME.cg_jdestroyed or 0) + 1 -- 水鬼：任何原因被销毁的小丑
   end
   return dissolve_ref(self, ...)
 end
@@ -441,6 +569,13 @@ CG.mod.calculate = function(self, context)
     end
     if n > 0 then CG.add_dread(n, first) end
     CG.tick_returns()
+    -- 残影待满一回合（来的那个回合不算）就散
+    for _, j in ipairs(G.jokers.cards) do
+      if j.ability.cg_afterimage then
+        if j.ability.cg_afterimage == true then j.ability.cg_afterimage = 1
+        else j.cg_sold = true; j:start_dissolve({ HEX('3a0a0e'), G.C.BLACK }, true, 1.6) end
+      end
+    end
   end
 end
 
@@ -461,6 +596,7 @@ end
 local delete_run_ref = Game.delete_run
 function Game:delete_run()
   CG.t.impact, CG.t.impact_victim, CG.t.silence, CG.t.flash = nil, nil, 0, 0
+  CG.choosing = nil
   if CG.box then CG.box:remove(); CG.box = nil end
   return delete_run_ref(self)
 end
@@ -470,6 +606,16 @@ function Game:update(dt)
   update_ref(self, dt)
   if CG.t.silence > 0 then CG.t.silence = CG.t.silence - dt end
   if CG.t.flash > 0 then CG.t.flash = math.max(0, CG.t.flash - dt * 1.5) end
+  local c = CG.choosing
+  if c and not G.SETTINGS.paused then
+    c.t = c.t - dt
+    c.pulse = c.pulse - dt
+    if c.pulse <= 0 then -- 心跳一样一下一下抖能交的牌
+      c.pulse = 0.9
+      for _, j in ipairs(c.pool) do if not j.removed then j:juice_up(0.12, 0.12) end end
+    end
+    if c.t <= 0 or not G.jokers then CG.choose(nil) end
+  end
   if CG.t.impact and not G.SETTINGS.paused then
     CG.t.impact = CG.t.impact - dt
     if CG.t.impact <= 0 then
@@ -596,6 +742,7 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Red Envelope', text = {
       '{C:red}Cursed.{} When obtained, gain {C:money}$#1#{}',
+      'Each scored {C:hearts}Heart{} or {C:diamonds}Diamond{} earns {C:money}$1{}',
       'Adds {C:red}+#2#{} Dread at end of round',
       'Can only be {C:attention}passed on{} (sell).',
       'It returns after {C:attention}3{} rounds',
@@ -603,6 +750,7 @@ CG.J {
     } },
     ['zh_CN'] = { name = '路边红包', text = {
       '{C:red}诅咒。{}获得时 {C:money}+$#1#{}',
+      '每张计分的{C:hearts}红心{}或{C:diamonds}方块{} {C:money}+$1{}',
       '回合结束时 {C:red}+#2#{} 恐惧',
       '只能{C:attention}转送{}（卖出），',
       '{C:attention}3{} 回合后它会回来',
@@ -622,6 +770,10 @@ CG.J {
     CG.msg(card, CG.L('The wedding is set', '亲事定了'), HEX('c8352b'))
   end,
   calculate = function(self, card, context)
+    if context.individual and context.cardarea == G.play and not context.blueprint
+        and (context.other_card:is_suit('Hearts') or context.other_card:is_suit('Diamonds')) then
+      return { dollars = 1 } -- 红色花色：红包的颜色
+    end
     if eor(context) then
       CG.add_dread(card.ability.extra.dread + CG.gen(card), card)
     end
@@ -631,42 +783,42 @@ CG.J {
 -- 2 猴爪
 CG.J {
   key = 'monkey_paw', rarity = 3, cost = 8, cg_cursed = true, blueprint_compat = true,
-  config = { extra = { xmult = 3, eat = 1 } },
+  config = { extra = { xmult = 3, step = 0.5 } },
   loc_txt = {
     ['en-us'] = { name = "Monkey's Paw", text = {
       '{C:red}Cursed.{} {X:mult,C:white} X#1# {} Mult',
-      'At end of round, destroys {C:attention}#2#{}',
-      'random card(s) in your deck',
-      'Returns stronger. And hungrier.',
+      'At end of round, destroys the',
+      '{C:attention}lowest ranked{} card held in hand',
+      'Returns with {X:mult,C:white} +X#2# {}',
       '{C:cg_ink,f:cg_ghost}Borrowed luck must be paid back.{}',
     } },
     ['zh_CN'] = { name = '猴爪', text = {
       '{C:red}诅咒。{}{X:mult,C:white} X#1# {} 倍率',
-      '回合结束时，随机销毁牌组里',
-      '{C:attention}#2#{} 张牌',
-      '回来时更强，也更饿。',
+      '回合结束时，销毁手牌中',
+      '{C:attention}点数最小{}的一张',
+      '回来时 {X:mult,C:white} +X#2# {}',
       '{C:cg_ink,f:cg_ghost}借来的运，要还的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
-    local g = CG.gen(card)
-    return { vars = { card.ability.extra.xmult + g, card.ability.extra.eat + g } }
+    local e = card.ability.extra
+    return { vars = { e.xmult + e.step * CG.gen(card), e.step } }
   end,
   calculate = function(self, card, context)
-    local g = CG.gen(card)
+    local e = card.ability.extra
     if context.joker_main then
-      return { xmult = card.ability.extra.xmult + g }
+      return { xmult = e.xmult + e.step * CG.gen(card) }
     end
-    if eor(context) and G.playing_cards and #G.playing_cards > 0 then
-      local pool, victims = {}, {}
-      for _, c in ipairs(G.playing_cards) do pool[#pool + 1] = c end
-      for i = 1, math.min(card.ability.extra.eat + g, #pool) do
-        local c, k = pseudorandom_element(pool, pseudoseed('cg_paw'))
-        table.remove(pool, k)
-        victims[#victims + 1] = c
+    -- 吃掉手里点数最小的一张：原版玩家本来就想删牌，这是交易，不是纯惩罚
+    if eor(context) and G.hand and #G.hand.cards > 0 then
+      local low
+      for _, c in ipairs(G.hand.cards) do
+        if not c.destroyed and not SMODS.has_no_rank(c) and (not low or c:get_id() < low:get_id()) then low = c end
       end
-      CG.msg(card, CG.L('It took something', '它拿走了一些东西'))
-      SMODS.destroy_cards(victims)
+      if low then
+        CG.msg(card, CG.L('It took something', '它拿走了一些东西'))
+        SMODS.destroy_cards({ low })
+      end
     end
   end,
 }
@@ -749,27 +901,31 @@ CG.J {
 -- 5 瓷娃娃
 CG.J {
   key = 'doll', rarity = 2, cost = 5, cg_cursed = true, blueprint_compat = true,
-  config = { extra = { chips = 20 } },
+  config = { extra = { xmult = 2, step = 0.5, dread = 1 } },
   loc_txt = {
     ['en-us'] = { name = 'Porcelain Doll', text = {
-      '{C:red}Cursed.{} {C:chips}+#1#{} Chips for every point of Dread',
-      '{C:inactive}(Currently {C:chips}+#2#{C:inactive}){}',
+      '{C:red}Cursed.{} {X:mult,C:white} X#1# {} Mult if played hand',
+      'contains a {C:attention}Pair{}',
+      'Adds {C:red}+#2#{} Dread at end of round',
       "{C:cg_ink,f:cg_ghost}Not by the bed. Not in the seventh month.{}",
     } },
     ['zh_CN'] = { name = '瓷娃娃', text = {
-      '{C:red}诅咒。{}每 1 点恐惧 {C:chips}+#1#{} 筹码',
-      '{C:inactive}（当前 {C:chips}+#2#{C:inactive}）{}',
+      '{C:red}诅咒。{}打出的牌型含{C:attention}对子{}时',
+      '{X:mult,C:white} X#1# {} 倍率',
+      '回合结束时 {C:red}+#2#{} 恐惧',
       '{C:cg_ink,f:cg_ghost}七月，别把它摆在床头。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
-    local per = card.ability.extra.chips * (1 + 0.5 * CG.gen(card))
-    return { vars = { per, per * CG.dread() } }
+    local e = card.ability.extra
+    return { vars = { e.xmult + e.step * CG.gen(card), e.dread } }
   end,
   calculate = function(self, card, context)
-    if context.joker_main and CG.dread() > 0 then
-      return { chips = card.ability.extra.chips * (1 + 0.5 * CG.gen(card)) * CG.dread() }
+    local e = card.ability.extra
+    if context.joker_main and next(context.poker_hands['Pair']) then
+      return { xmult = e.xmult + e.step * CG.gen(card) } -- 娃娃总是成对摆的
     end
+    if eor(context) then CG.add_dread(e.dread, card) end
     -- 你去商店的时候，它悄悄换了位置
     if context.starting_shop and not context.blueprint and #G.jokers.cards > 1 then
       G.E_MANAGER:add_event(Event({ func = function()
@@ -808,7 +964,7 @@ function CG.check_letters()
           local gen = CG.gen(j)
           j.cg_sold = true -- 拆开不算「被销毁」，招魂不召它
           SMODS.destroy_cards({ j }, { bypass_eternal = true })
-          local new = SMODS.add_card { set = 'Joker', key_append = 'cg_letter' }
+          local new = SMODS.add_card { set = 'Joker', rarity = 'Rare', key_append = 'cg_letter' } -- 恐惧的正面回报：一张稀有
           if new and gen > 0 then new:set_edition(poll_edition('cg_letter_ed', nil, true, true)) end
           return true
         end }))
@@ -821,40 +977,32 @@ end
 -- 6 连锁信
 CG.J {
   key = 'chain_letter', rarity = 1, cost = 4, cg_cursed = true, blueprint_compat = true,
-  config = { extra = { mult = 4, held = 0, every = 3 } },
+  config = { extra = { mult = 4, dread = 1 } },
   loc_txt = {
     ['en-us'] = { name = 'Chain Letter', text = {
       '{C:red}Cursed.{} {C:mult}+#1#{} Mult for each Joker you have',
       '{C:inactive}(Currently {C:mult}+#2#{C:inactive}){}',
-      'Every {C:attention}3{} rounds you keep it,',
-      '{C:red}-1{} hand size permanently',
-      '{C:inactive}({}#3#{C:inactive} rounds left. Pass it on.){}',
+      'Adds {C:red}+#3#{} Dread at end of round',
+      '{C:inactive}(Pass it on.){}',
     } },
     ['zh_CN'] = { name = '连锁信', text = {
       '{C:red}诅咒。{}每有 1 张小丑，{C:mult}+#1#{} 倍率',
       '{C:inactive}（当前 {C:mult}+#2#{C:inactive}）{}',
-      '每留着它 {C:attention}3{} 回合，',
-      '手牌上限永久 {C:red}-1{}',
-      '{C:inactive}（还剩 {}#3#{C:inactive} 回合。转给下一个人。）{}',
+      '回合结束时 {C:red}+#3#{} 恐惧',
+      '{C:inactive}（转给下一个人。）{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
     local e = card.ability.extra
     local per = e.mult + 2 * CG.gen(card)
-    return { vars = { per, per * (G.jokers and #G.jokers.cards or 1), e.every - e.held % e.every } }
+    return { vars = { per, per * (G.jokers and #G.jokers.cards or 1), e.dread } }
   end,
   calculate = function(self, card, context)
     local e = card.ability.extra
     if context.joker_main then
       return { mult = (e.mult + 2 * CG.gen(card)) * #G.jokers.cards }
     end
-    if context.end_of_round and context.main_eval and not context.blueprint then
-      e.held = e.held + 1
-      if e.held % e.every == 0 and G.hand.config.card_limit > 1 then
-        G.hand:change_size(-1)
-        CG.msg(card, CG.L('-1 hand size', '手牌上限 -1'))
-      end
-    end
+    if eor(context) then CG.add_dread(e.dread, card) end
   end,
 }
 
@@ -867,14 +1015,14 @@ CG.J {
     ['en-us'] = { name = 'Paper Effigy', text = {
       '{C:attention}Gift.{} Copies the ability of',
       'the Joker to its {C:attention}left{}',
-      'Burns itself after {C:attention}#1#{} more round(s)',
-      '{C:inactive}(and adds {C:red}+#2#{C:inactive} Dread){}',
+      'Burns itself after {C:attention}#1#{} more round(s),',
+      'leaving a {C:tarot}Tarot{} card {C:inactive}(and {C:red}+#2#{C:inactive} Dread){}',
       '{C:cg_ink,f:cg_ghost}Made to take your place.{}',
     } },
     ['zh_CN'] = { name = '纸人', text = {
       '{C:attention}礼物。{}复制{C:attention}左边{}小丑的能力',
-      '再过 {C:attention}#1#{} 回合会自燃',
-      '{C:inactive}（自燃时 {C:red}+#2#{C:inactive} 恐惧）{}',
+      '再过 {C:attention}#1#{} 回合会自燃，',
+      '留下一张{C:tarot}塔罗牌{}{C:inactive}（并 {C:red}+#2#{C:inactive} 恐惧）{}',
       '{C:cg_ink,f:cg_ghost}扎来替你挡煞的。{}',
     } },
   },
@@ -889,6 +1037,7 @@ CG.J {
       if e.held >= e.rounds + CG.gen(card) then
         CG.add_dread(e.dread, card)
         CG.msg(card, CG.L('It burned', '烧掉了'), G.C.ORANGE)
+        CG.give('Tarot', 'cg_effigy') -- 烧纸：灰里留下一张塔罗
         SMODS.destroy_cards({ card }, { bypass_eternal = true })
         return
       end
@@ -900,23 +1049,25 @@ CG.J {
 -- 8 纸钱
 CG.J {
   key = 'joss', rarity = 1, cost = 4, blueprint_compat = true,
-  config = { extra = { dollars = 3 } },
+  config = { extra = { dollars = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Joss Paper', text = {
-      'Whenever you sell or pass on a Joker,',
+      'Whenever you sell {C:attention}any card{}',
+      '{C:inactive}(Jokers, Tarots, Planets...){},',
       'earn {C:money}$#1#{} and gain {C:red}+1{} Dread',
       '{C:cg_ink,f:cg_ghost}Silver for the brothers, gold for the gods.{}',
       '{C:cg_ink,f:cg_ghost}Do not mix them up.{}',
     } },
     ['zh_CN'] = { name = '纸钱', text = {
-      '每卖掉或转送一张小丑，',
+      '每卖掉{C:attention}任何一张牌{}',
+      '{C:inactive}（小丑、塔罗、星球……）{}，',
       '{C:money}+$#1#{}，{C:red}+1{} 恐惧',
       '{C:cg_ink,f:cg_ghost}银纸烧给好兄弟，金纸烧给神。别烧错。{}',
     } },
   },
   loc_vars = function(self, info_queue, card) return { vars = { card.ability.extra.dollars } } end,
   calculate = function(self, card, context)
-    if context.selling_card and context.card ~= card and context.card.ability.set == 'Joker' then
+    if context.selling_card and context.card ~= card then
       if not context.blueprint then CG.add_dread(1) end
       return { dollars = card.ability.extra.dollars }
     end
@@ -926,27 +1077,29 @@ CG.J {
 -- 9 守夜
 CG.J {
   key = 'night_watch', rarity = 1, cost = 5, blueprint_compat = true,
-  config = { extra = { chips = 20 } }, -- 平衡：只在最后一手生效，15 偏弱
+  config = { extra = { mult = 7 } },
   loc_txt = {
     ['en-us'] = { name = 'Night Watch', text = {
       'On the {C:attention}final hand{} of the round,',
-      '{C:chips}+#1#{} Chips for every point of Dread',
-      '{C:inactive}(Currently {C:chips}+#2#{C:inactive}){}',
+      'each scored {C:attention}7{} or {C:attention}4{}',
+      'gives {C:mult}+#1#{} Mult',
       '{C:cg_ink,f:cg_ghost}The lamp by the door shows them the way.{}',
     } },
     ['zh_CN'] = { name = '守夜', text = {
       '本回合{C:attention}最后一手牌{}时，',
-      '每 1 点恐惧 {C:chips}+#1#{} 筹码',
-      '{C:inactive}（当前 {C:chips}+#2#{C:inactive}）{}',
+      '每张计分的 {C:attention}7{} 和 {C:attention}4{}',
+      '{C:mult}+#1#{} 倍率',
       '{C:cg_ink,f:cg_ghost}门口那盏灯，是给好兄弟认路的。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
-    return { vars = { card.ability.extra.chips, card.ability.extra.chips * CG.dread() } }
+    return { vars = { card.ability.extra.mult } }
   end,
   calculate = function(self, card, context)
-    if context.joker_main and G.GAME.current_round.hands_left == 0 and CG.dread() > 0 then
-      return { chips = card.ability.extra.chips * CG.dread() }
+    -- 七月、四（死）：守最后一夜
+    if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_left == 0 then
+      local id = context.other_card:get_id()
+      if id == 7 or id == 4 then return { mult = card.ability.extra.mult } end
     end
   end,
 }
@@ -998,13 +1151,13 @@ CG.J {
     ['en-us'] = { name = 'Unopened Invitation', text = {
       '{C:attention}Gift.{} Arrives face down.',
       'Opens itself at {C:red}7{} Dread and becomes',
-      'a {C:attention}random Joker{}',
+      'a random {C:red}Rare{} Joker',
       '{C:cg_ink,f:cg_ghost}A Pudu invitation. You are the guest.{}',
     } },
     ['zh_CN'] = { name = '阴间帖', text = {
       '{C:attention}礼物。{}背面朝上。',
       '恐惧到 {C:red}7{} 时自己拆开，',
-      '变成一张{C:attention}随机小丑{}',
+      '变成一张随机{C:red}稀有{}小丑',
       '{C:cg_ink,f:cg_ghost}普渡的请帖。你是被请的那个。{}',
     } },
   },
@@ -1059,12 +1212,12 @@ CG.J {
   loc_txt = {
     ['en-us'] = { name = 'Return Gift', text = {
       'Whenever a passed-on card {C:attention}comes back{},',
-      'create a {C:spectral}Spectral{} card',
+      'or after {C:attention}It{} comes, create a {C:spectral}Spectral{} card',
       '{C:inactive}(Must have room){}',
       '{C:cg_ink,f:cg_ghost}Fed well, they give a little back.{}',
     } },
     ['zh_CN'] = { name = '回礼', text = {
-      '每当有转送的牌{C:attention}回来{}，',
+      '每当有转送的牌{C:attention}回来{}，或{C:attention}它{}来过之后，',
       '生成一张{C:spectral}幻灵牌{}',
       '{C:inactive}（必须有空位）{}',
       '{C:cg_ink,f:cg_ghost}好兄弟吃饱了，会还你一点东西。{}',
@@ -1075,29 +1228,33 @@ CG.J {
 -- 14 脚步声
 CG.J {
   key = 'footsteps', rarity = 1, cost = 5, blueprint_compat = true,
-  config = {},
+  config = { extra = { per = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Footsteps', text = {
-      'Each hand played adds {C:red}+1{} Dread',
-      '{C:mult}+1{} Mult for every point of Dread',
+      'Each played {C:attention}4{} adds {C:red}+1{} Dread',
+      '{C:mult}+#2#{} Mult for every point of Dread',
       '{C:inactive}(Currently {C:mult}+#1#{C:inactive}){}',
       '{C:cg_ink,f:cg_ghost}Ash by the door. On the seventh morning,{}',
       '{C:cg_ink,f:cg_ghost}footprints. Inward.{}',
     } },
     ['zh_CN'] = { name = '脚步声', text = {
-      '每出一手牌 {C:red}+1{} 恐惧',
-      '每 1 点恐惧 {C:mult}+1{} 倍率',
+      '每打出一张 {C:attention}4{} {C:red}+1{} 恐惧',
+      '每 1 点恐惧 {C:mult}+#2#{} 倍率',
       '{C:inactive}（当前 {C:mult}+#1#{C:inactive}）{}',
       '{C:cg_ink,f:cg_ghost}门口撒了灰。头七早上，脚印朝屋里。{}',
     } },
   },
-  loc_vars = function(self, info_queue, card) return { vars = { CG.dread() } } end,
+  loc_vars = function(self, info_queue, card)
+    return { vars = { card.ability.extra.per * CG.dread(), card.ability.extra.per } }
+  end,
   calculate = function(self, card, context)
     if context.before and not context.blueprint then
-      CG.add_dread(1, card)
+      local n = 0
+      for _, c in ipairs(context.full_hand or {}) do if c:get_id() == 4 then n = n + 1 end end
+      if n > 0 then CG.add_dread(n, card) end
     end
     if context.joker_main and CG.dread() > 0 then
-      return { mult = CG.dread() }
+      return { mult = card.ability.extra.per * CG.dread() }
     end
   end,
 }
@@ -1152,8 +1309,9 @@ if os.getenv('CG_TEST') then
     if not done then
       done = true
       local dw, dh = love.window.getDesktopDimensions()
-      local w, h = 640, 400
-      love.window.setMode(w, h, { fullscreen = false, resizable = true, highdpi = true, x = dw - w - 10, y = dh - h - 40 })
+      local demo = os.getenv('CG_TEST') == 'demo'
+      local w, h = demo and 960 or 640, demo and 540 or 400
+      love.window.setMode(w, h, { fullscreen = false, resizable = true, highdpi = not demo, x = dw - w - 10, y = dh - h - 40 })
       love.resize(love.graphics.getWidth(), love.graphics.getHeight())
     end
     return upd0(self, dt)
@@ -1165,6 +1323,8 @@ elseif os.getenv('CG_TEST') == 'interact' then assert(SMODS.load_file('test_inte
 elseif os.getenv('CG_TEST') == 'tw' then assert(SMODS.load_file('test_tw.lua'))()
 elseif os.getenv('CG_TEST') == 'whisper' then assert(SMODS.load_file('test_whisper.lua'))()
 elseif os.getenv('CG_TEST') == 'show' then assert(SMODS.load_file('test_show.lua'))()
+elseif os.getenv('CG_TEST') == 'demo' then assert(SMODS.load_file('test_demo.lua'))()
+elseif os.getenv('CG_TEST') == 'rework' then -- test_rework.lua 在 tw.lua 之后加载
 elseif os.getenv('CG_TEST') and os.getenv('CG_TEST') ~= 'pool' and os.getenv('CG_TEST') ~= 'chal' then assert(SMODS.load_file('test.lua'))() end
 
 -- 台湾鬼月篇新牌（掷筊 / 普渡供桌 / 魔神仔 / 水鬼 / 跳钟馗），见 docs/world-tw.md
@@ -1182,9 +1342,17 @@ if os.getenv('CG_MEMORY') then assert(SMODS.load_file('test_memory.lua'))() end
 assert(SMODS.load_file('challenges.lua'))()
 if os.getenv('CG_TEST') == 'chal' then assert(SMODS.load_file('test_chal.lua'))() end
 
+-- 鬼月日历：底注 4 中元普渡 / 底注 8 关鬼门，见 calendar.lua
+assert(SMODS.load_file('calendar.lua'))()
+
+-- 悬浮说明、鬼月牌组、传奇、符印、优惠券、标签，见 extras.lua；装了 JokerDisplay 就挂上显示定义
+assert(SMODS.load_file('extras.lua'))()
+if JokerDisplay then assert(SMODS.load_file('joker_display.lua'))() end
+
 -- 混玩定位：诅咒牌退出牌池、纸钱包、恐惧条碰到才浮现，见 pool.lua
 assert(SMODS.load_file('pool.lua'))()
 if os.getenv('CG_TEST') == 'pool' then assert(SMODS.load_file('test_pool.lua'))() end
 
 -- 台湾繁体 + 英文翻译（必须最后加载），见 tw.lua
 assert(SMODS.load_file('tw.lua'))()
+if os.getenv('CG_TEST') == 'rework' then assert(SMODS.load_file('test_rework.lua'))() end

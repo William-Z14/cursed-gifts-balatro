@@ -27,23 +27,23 @@ function CG.pass_on(card)
 end
 
 
--- 16 掷筊
+-- 16 掷筊：打出对子时掷（筊杯本来就是一对）
 CG.J {
   key = 'poe', rarity = 1, cost = 4, blueprint_compat = true,
-  config = { extra = { mult = 4, down = 2, up = 2 } },
+  config = { extra = { mult = 4, xmult = 2, up = 2 } },
   loc_txt = {
     ['en-us'] = { name = 'Moon Blocks', text = {
       '{C:mult}+#1#{} Mult',
-      'When Blind is selected, cast once:',
-      '{C:green}Yes{} (1/2): {C:attention}-#2#{} Dread',
+      'When played hand contains a {C:attention}Pair{}, cast:',
+      '{C:green}Yes{} (1/2): {X:mult,C:white} X#2# {} Mult',
       '{C:inactive}Laughing{} (1/4): nothing',
       '{C:red}No{} (1/4): {C:red}+#3#{} Dread',
       '{C:cg_ink,f:cg_ghost}Ask again.{}',
     } },
     ['zh_CN'] = { name = '掷筊', text = {
       '{C:mult}+#1#{} 倍率',
-      '选盲注时掷一次：',
-      '{C:green}圣筊{}（1/2）恐惧 {C:attention}-#2#{}',
+      '打出的牌型含{C:attention}对子{}时掷一次：',
+      '{C:green}圣筊{}（1/2）{X:mult,C:white} X#2# {} 倍率',
       '{C:inactive}笑筊{}（1/4）没事',
       '{C:red}阴筊{}（1/4）恐惧 {C:red}+#3#{}',
       '{C:cg_ink,f:cg_ghost}再问一次。{}',
@@ -51,15 +51,15 @@ CG.J {
   },
   loc_vars = function(self, info_queue, card)
     local e = card.ability.extra
-    return { vars = { e.mult, e.down, e.up } }
+    return { vars = { e.mult, e.xmult, e.up } }
   end,
   calculate = function(self, card, context)
     local e = card.ability.extra
-    if context.setting_blind and not context.blueprint then
+    if context.before and not context.blueprint and next(context.poker_hands['Pair']) then
       CG.play('jiaobei', 0.95 + 0.1 * pseudorandom('cg_poe_pitch'), 0.9)
       local r = pseudorandom('cg_poe')
       if r < 0.5 then
-        CG.add_dread(-math.min(e.down, CG.dread()))
+        e.holy = true
         CG.msg(card, CG.L('Yes', '圣筊'), G.C.GREEN)
       elseif r < 0.75 then
         CG.msg(card, CG.L('It laughs', '笑筊'), G.C.UI.TEXT_INACTIVE)
@@ -68,142 +68,174 @@ CG.J {
         CG.msg(card, CG.L('No', '阴筊'), G.C.RED)
       end
     end
-    if context.joker_main then return { mult = e.mult } end
+    if context.joker_main then
+      if e.holy then return { mult = e.mult, xmult = e.xmult } end
+      return { mult = e.mult }
+    end
+    if context.after and not context.blueprint then e.holy = nil end
   end,
 }
 
 -- 17 普渡供桌
 CG.J {
   key = 'pudu', rarity = 2, cost = 6, cg_gift = true, blueprint_compat = true,
-  config = { extra = { per = 6 } },
+  config = { extra = { per = 6, per_offer = 2, offer = 0 } },
   loc_txt = {
     ['en-us'] = { name = 'Offering Table', text = {
       '{C:attention}Gift.{} {C:mult}+#1#{} Mult for every card',
-      '{C:attention}passed on{} this run',
+      '{C:attention}passed on{} this run, and {C:mult}+#3#{} Mult for every',
+      '{C:tarot}Tarot{} or {C:planet}Planet{} used while on the table',
       '{C:inactive}(Currently {C:mult}+#2#{C:inactive}){}',
       'Pass it on: it returns in {C:attention}2{} rounds',
       '{C:cg_ink,f:cg_ghost}Feed them, and they leave you be.{}',
     } },
     ['zh_CN'] = { name = '普渡供桌', text = {
-      '{C:attention}礼物。{}这局每{C:attention}转送{}一张牌，',
-      '{C:mult}+#1#{} 倍率',
+      '{C:attention}礼物。{}这局每{C:attention}转送{}一张牌 {C:mult}+#1#{} 倍率；',
+      '摆着时每用一张{C:tarot}塔罗{}或{C:planet}星球{}（供品）{C:mult}+#3#{} 倍率',
       '{C:inactive}（当前 {C:mult}+#2#{C:inactive}）{}',
       '转送后 {C:attention}2{} 回合回来',
       '{C:cg_ink,f:cg_ghost}好兄弟吃饱了，就不找你。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
+    local e = card.ability.extra
     local n = (G.GAME and G.GAME.cg_passed) or 0
-    return { vars = { card.ability.extra.per, card.ability.extra.per * n } }
+    return { vars = { e.per, e.per * n + e.per_offer * (e.offer or 0), e.per_offer } }
   end,
   calculate = function(self, card, context)
-    local n = G.GAME.cg_passed or 0
-    if context.joker_main and n > 0 then return { mult = card.ability.extra.per * n } end
+    local e = card.ability.extra
+    if context.using_consumeable and not context.blueprint and context.consumeable
+        and (context.consumeable.ability.set == 'Tarot' or context.consumeable.ability.set == 'Planet') then
+      e.offer = (e.offer or 0) + 1
+      CG.msg(card, CG.L('Offered', '供上了'), G.C.MULT)
+    end
+    local m = e.per * (G.GAME.cg_passed or 0) + e.per_offer * (e.offer or 0)
+    if context.joker_main and m > 0 then return { mult = m } end
   end,
 }
 
--- 18 魔神仔：牵走一张小丑，2 回合后放回来（带诅咒）；有小丑在山里时 X2
-local function away()
-  for _, e in ipairs(G.GAME.cg_returning or {}) do
-    if e.mosina then return true end
-  end
-end
-
+-- 18 魔神仔：计分的人头牌可能被牵进山里；回来时变成石头牌（嘴里塞满草和泥）
 CG.J {
   key = 'mosina', rarity = 2, cost = 6, cg_cursed = true, blueprint_compat = true,
-  config = { extra = { odds = 3, xmult = 2, rounds = 2 } },
+  config = { extra = { odds = 4, step = 0.25, xmult = 1, rounds = 3 } },
   loc_txt = {
     ['en-us'] = { name = 'Mo-sin-a', text = {
-      '{C:red}Cursed.{} At end of round, {C:green}#4# in #1#{} chance',
-      'to lead away a non-Cursed Joker.',
-      'It comes back in {C:attention}#3#{} rounds, {C:red}Cursed{}',
-      '{X:mult,C:white} X#2# {} Mult while someone is in the hills',
+      '{C:red}Cursed.{} Scored {C:attention}face{} cards have a {C:green}#1# in #2#{}',
+      'chance to be led away. Each one gives',
+      'this Joker {X:mult,C:white} +X#3# {} Mult permanently',
+      '{C:inactive}(Currently {X:mult,C:white} X#4# {C:inactive}){}',
+      'They come back in {C:attention}#5#{} rounds as {C:attention}Stone{} cards',
       '{C:cg_ink,f:cg_ghost}They found him with grass in his mouth.{}',
     } },
     ['zh_CN'] = { name = '魔神仔', text = {
-      '{C:red}诅咒。{}回合结束时 {C:green}#4#/#1#{} 机率',
-      '把一张非诅咒小丑牵进山里，',
-      '{C:attention}#3#{} 回合后放回来，带着{C:red}诅咒{}',
-      '有人在山里时 {X:mult,C:white} X#2# {} 倍率',
+      '{C:red}诅咒。{}计分的{C:attention}人头牌{}有 {C:green}#1#/#2#{} 机率',
+      '被牵进山里，每牵走一张永久 {X:mult,C:white} +X#3# {} 倍率',
+      '{C:inactive}（当前 {X:mult,C:white} X#4# {C:inactive}）{}',
+      '{C:attention}#5#{} 回合后回来，变成{C:attention}石头牌{}',
       '{C:cg_ink,f:cg_ghost}找到的时候，嘴里塞满了草。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
     local e = card.ability.extra
     local num, den = SMODS.get_probability_vars(card, 1, e.odds, 'cg_mosina')
-    return { vars = { den, e.xmult, e.rounds, num } }
+    info_queue[#info_queue + 1] = G.P_CENTERS.m_stone
+    return { vars = { num, den, e.step, e.xmult, e.rounds } }
   end,
   calculate = function(self, card, context)
     local e = card.ability.extra
-    if context.joker_main and away() then return { xmult = e.xmult } end
-    if eor(context) and SMODS.pseudorandom_probability(card, 'cg_mosina', 1, e.odds, 'cg_mosina') then
-      local pool = {}
-      for _, j in ipairs(G.jokers.cards) do
-        if j ~= card and not CG.is_cursed(j) and not j.ability.eternal and not j.getting_sliced and not j.cg_marked then pool[#pool + 1] = j end
+    if context.destroy_card and context.cardarea == G.play and not context.blueprint then
+      local c = context.destroy_card
+      if c:is_face() and not c.cg_led and SMODS.pseudorandom_probability(card, 'cg_mosina', 1, e.odds, 'cg_mosina') then
+        c.cg_led = true
+        e.xmult = e.xmult + e.step
+        G.GAME.cg_hills = G.GAME.cg_hills or {}
+        table.insert(G.GAME.cg_hills, { suit = c.base.suit, rank = c.base.value, rounds = e.rounds })
+        CG.msg(card, CG.L('Led away', '被牵走了'), HEX('5f7a3a'))
+        return { remove = true }
       end
-      if #pool == 0 then return end
-      local v = pseudorandom_element(pool, pseudoseed('cg_mosina_pick'))
-      -- rounds + 1：同一个回合结束里，mod 自己的 tick_returns 排在小丑之后，会马上减掉一次
-      -- 记下版本和 ability（数值成长、永恒/租赁等贴纸），回来的是同一张牌，不是新牌
-      table.insert(G.GAME.cg_returning, {
-        key = v.config.center.key, rounds = e.rounds + 1, gen = CG.gen(v), sticker = true, mosina = true,
-        edition = v.edition and v.edition.key, ability = copy_table(v.ability),
-      })
-      v.cg_sold = true -- 不算被销毁，招魂叫不回来
-      CG.msg(v, CG.L('Led away', '被牵走了'), HEX('5f7a3a'))
-      SMODS.destroy_cards({ v }, { bypass_eternal = true, skip_calc = true, colours = { HEX('3d5a2a'), HEX('1a2614') }, dissolve_time_fac = 1.6 })
-      return nil, true
     end
+    if context.joker_main and e.xmult > 1 then return { xmult = e.xmult } end
   end,
 }
 
--- 19 水鬼：这局每被「它」带走一张，+X0.75
--- 依赖 endings.lua 的 CG.impact 包装写入 G.GAME.cg_taken；拆掉 endings 时这里要自己记
+-- 山里的人：每回合结束数一次，到了就以石头牌回到牌组
+local tick_ref = CG.tick_returns
+function CG.tick_returns()
+  local q, keep = G.GAME.cg_hills or {}, {}
+  for _, e in ipairs(q) do
+    e.rounds = e.rounds - 1
+    if e.rounds > 0 then keep[#keep + 1] = e else
+      G.E_MANAGER:add_event(Event({ trigger = 'after', delay = 0.4, func = function()
+        local ok = pcall(SMODS.add_card, { set = 'Enhanced', enhancement = 'm_stone', suit = e.suit, rank = e.rank, area = G.deck, key_append = 'cg_hills' })
+        if ok then
+          CG.play('return', 0.85, 0.7)
+          CG.say('it came back with mud in its mouth', '它回来了，嘴里都是泥')
+        end
+        return true
+      end }))
+    end
+  end
+  G.GAME.cg_hills = keep
+  return tick_ref()
+end
+
+-- 19 水鬼：这局每有一张小丑被销毁 +X0.5（「它」带走的算两次）
 CG.J {
   key = 'water_ghost', rarity = 3, cost = 8, cg_cursed = true, blueprint_compat = true,
-  config = { extra = { per = 0.75 } },
+  config = { extra = { per = 0.5 } },
   loc_txt = {
     ['en-us'] = { name = 'Water Ghost', text = {
-      '{C:red}Cursed.{} {X:mult,C:white} X#1# {} Mult for every Joker',
-      '{C:attention}It{} has taken this run',
+      '{C:red}Cursed.{} {X:mult,C:white} +X#1# {} Mult for every Joker',
+      '{C:attention}destroyed{} this run, for any reason',
+      '{C:inactive}(Jokers {C:attention}It{C:inactive} takes count twice){}',
       '{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive}){}',
       '{C:cg_ink,f:cg_ghost}It is waiting for a replacement too.{}',
     } },
     ['zh_CN'] = { name = '水鬼', text = {
-      '{C:red}诅咒。{}这局每有一张小丑被{C:attention}它{}带走，',
-      '{X:mult,C:white} +X#1# {} 倍率',
+      '{C:red}诅咒。{}这局每有一张小丑被{C:attention}销毁{}',
+      '（任何原因），{X:mult,C:white} +X#1# {} 倍率',
+      '{C:inactive}（被{C:attention}它{C:inactive}带走的算两次）{}',
       '{C:inactive}（当前 {X:mult,C:white} X#2# {C:inactive}）{}',
       '{C:cg_ink,f:cg_ghost}它也在等交替。{}',
     } },
   },
   loc_vars = function(self, info_queue, card)
-    local n = #((G.GAME and G.GAME.cg_taken) or {})
+    local n = (G.GAME and G.GAME.cg_jdestroyed) or 0
     return { vars = { card.ability.extra.per, 1 + card.ability.extra.per * n } }
   end,
   calculate = function(self, card, context)
-    local n = #(G.GAME.cg_taken or {})
+    local n = G.GAME.cg_jdestroyed or 0 -- main.lua：start_dissolve 记 +1，「它」碎掉的记 +2
     if context.joker_main and n > 0 then return { xmult = 1 + card.ability.extra.per * n } end
   end,
 }
 
 -- 20 跳钟馗：「它」要来时代替整场，自己碎掉
 CG.J {
-  key = 'zhongkui', rarity = 3, cost = 7, blueprint_compat = false, eternal_compat = false, -- 会自己碎，不能带永恒
-  config = {},
+  key = 'zhongkui', rarity = 3, cost = 7, blueprint_compat = true, eternal_compat = false, -- 会自己碎，不能带永恒
+  config = { extra = { xmult = 1.2 } },
   loc_txt = {
     ['en-us'] = { name = 'Zhong Kui Dance', text = {
+      'Each scored {C:attention}King{} gives {X:mult,C:white} X#1# {} Mult',
       'When {C:attention}It{} comes, this card dances instead:',
       'It is driven off, Dread resets,',
       'nothing is taken. {C:red}This card shatters.{}',
       '{C:cg_ink,f:cg_ghost}The dancer must not look back.{}',
     } },
     ['zh_CN'] = { name = '跳钟馗', text = {
+      '每张计分的 {C:attention}K{} {X:mult,C:white} X#1# {} 倍率',
       '{C:attention}它{}来的时候，这张替你跳一场：',
       '把它赶走，恐惧归零，',
       '什么都不会被带走。{C:red}这张自己碎掉。{}',
       '{C:cg_ink,f:cg_ghost}跳的人不能回头。{}',
     } },
   },
+  loc_vars = function(self, info_queue, card) return { vars = { card.ability.extra.xmult } } end,
+  calculate = function(self, card, context)
+    -- 钟馗就是那张 K
+    if context.individual and context.cardarea == G.play and context.other_card:get_id() == 13 then
+      return { xmult = card.ability.extra.xmult }
+    end
+  end,
 }
 
 local it_comes_ref = CG.it_comes
