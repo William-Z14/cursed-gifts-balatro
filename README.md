@@ -27,6 +27,10 @@ Plays fine alongside other content mods: Cursed Jokers never appear in the shop,
 
 ## Install
 
+**Easiest:** install with r2modman / Thunderstore Mod Manager from [Thunderstore](https://thunderstore.io/c/balatro/p/William_Z14/CursedGifts/) (Lovely and Steamodded come along automatically). Also on [Nexus Mods](https://www.nexusmods.com/balatro/mods/1014).
+
+**Manual:**
+
 1. Install [Lovely](https://github.com/ethangreen-dev/lovely-injector) and [Steamodded](https://github.com/Steamodded/smods).
 2. Download `CursedGifts-v0.2.3.zip` from Releases and unzip the `CursedGifts` folder into your `Mods` folder.
 3. Start Balatro. Modded runs don't count toward Steam achievements (true of all Steamodded mods).
@@ -62,4 +66,4 @@ This is an early version (0.2.3). Bug reports, balance notes and folklore correc
 - 牌上的懸浮說明會解釋恐懼、詛咒禮物、轉送；支援 JokerDisplay。
 - 三個鬼月挑戰：抓交替、七月半、跳鍾馗（在 Mods → 詛咒禮物 → 鬼月挑戰 直接開始）。
 
-安裝：先裝 Lovely 和 Steamodded，再把 `CursedGifts` 資料夾放進 `Mods`。問題回報請開 Issue。
+安裝：用 r2modman 從 [Thunderstore](https://thunderstore.io/c/balatro/p/William_Z14/CursedGifts/) 一鍵裝（自動帶上 Lovely 和 Steamodded），或從 [Nexus Mods](https://www.nexusmods.com/balatro/mods/1014) 下載；手動裝就先裝 Lovely 和 Steamodded，再把 `CursedGifts` 資料夾放進 `Mods`。問題回報請開 Issue。
