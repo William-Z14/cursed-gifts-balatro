@@ -7,7 +7,9 @@ In the seventh lunar month the gates of the underworld open. Someone leaves you 
 
 ![Demo](screenshots/demo.gif)
 
-![Cards](screenshots/cards.png)
+![Cursed Jokers](screenshots/cards-1.png)
+![Living with Dread](screenshots/cards-2.png)
+![Pass it on, drive it off](screenshots/cards-3.png)
 
 ## What it adds
 
